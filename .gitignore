@@ -1,0 +1,25 @@
+# MoonProbe build artifacts
+target/
+_build/
+
+# Mooncake (MoonBit third-party) dependency cache
+.mooncakes/
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test fixtures that may contain secrets or large payloads
+tests/fixtures/*.actual.json
+
+# OS
+Thumbs.db
+desktop.ini
+
+# Local scratch
+scratch/
+*.log

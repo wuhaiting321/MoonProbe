@@ -1,0 +1,2 @@
+// Root package of the MoonProbe module.
+// Aggregates shared types used across parser, runner, assert and reporter.
