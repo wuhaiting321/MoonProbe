@@ -1,0 +1,8 @@
+// import {
+//   "MoonProbe/parser",
+//   "MoonProbe/runner",
+//   "MoonProbe/assert",
+//   "MoonProbe/reporter",
+// }
+
+pkgtype(kind: "executable")

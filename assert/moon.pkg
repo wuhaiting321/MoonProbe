@@ -1,0 +1,2 @@
+// The assert package depends only on the standard library.
+// It will import "MoonProbe/runner" for response types once implemented.

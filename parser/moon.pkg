@@ -1,0 +1,2 @@
+// The parser package depends only on the standard library.
+// No intra-module imports are required at present.
