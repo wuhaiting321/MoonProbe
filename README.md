@@ -168,17 +168,31 @@ expect:
 moon check --target wasm-gc
 moon test  --target wasm-gc
 
-# 运行示例用例（需要 Node.js 与 curl）
+# 运行示例用例：CLI 必须显式指定 --target js
 moon run cli --target js -- examples/httpbin.probe
 
 # 生成 JUnit XML 报告
 moon run cli --target js -- examples/auth_chain.probe --junit junit.xml
 ```
 
-`examples/` 下提供三个可直接运行的用例：`example_com.probe`（最小 GET）、
+> **运行 CLI 必须使用 `--target js`。** CLI 通过 `extern "js"` 调用宿主机 `curl`
+> 发起真实 HTTP 请求，并依赖 JS 宿主读写 `.probe` 用例文件与报告文件；
+> 用其他后端（如 `native`）运行会直接失败。模块的 `preferred_target` 也已设为 `js`。
+
+### 4.6 `examples/` 目录的性质
+
+`examples/` 下的 `.probe` 文件是**示例用例，需要手动运行验证**，
+**不属于自动化测试套件**：
+
+- 它们不会被 `moon test` 执行，也不进入 CI（CI 只跑 `wasm-gc` 后端的单元测试）；
+- 其中部分用例会真实访问外部站点（如 `httpbin.org`、`example.com`），
+  运行结果取决于网络可达性，不适合作为构建门禁；
+- 项目的自动化测试位于各包的 `*_test.mbt` 文件，由 `moon test` 执行。
+
+`examples/` 目前提供三个可直接运行的示例：`example_com.probe`（最小 GET）、
 `httpbin.probe`（查询参数 + JSON 嵌套字段断言）、`auth_chain.probe`（变量提取与串联）。
 
-### 4.6 原创性与参考说明
+### 4.7 原创性与参考说明
 
 本项目**不是移植项目**，`.probe` 语法、词法分析器、解析器、执行器、断言引擎、
 报告生成器与 CLI 全部为原创实现，不包含任何来源不明的代码、私有代码、闭源代码
