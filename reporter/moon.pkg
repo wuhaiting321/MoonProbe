@@ -4,3 +4,8 @@
 import {
   "MoonProbe/runner",
 }
+
+import {
+  "MoonProbe/parser",
+  "moonbitlang/core/test",
+} for "test"
