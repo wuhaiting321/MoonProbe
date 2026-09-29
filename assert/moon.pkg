@@ -1,2 +1,13 @@
-// The assert package depends only on the standard library.
-// It will import "MoonProbe/runner" for response types once implemented.
+// The assert package compares a response against the `expect:` block of a
+// parsed `.probe` case. It only needs the AST for the expectations, so it
+// depends on `parser` and on the core JSON decoder — never on the runner.
+
+import {
+  "MoonProbe/parser",
+  "moonbitlang/core/json",
+}
+
+import {
+  "MoonProbe/parser",
+  "moonbitlang/core/test",
+} for "test"

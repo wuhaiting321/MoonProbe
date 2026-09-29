@@ -1,8 +1,10 @@
-// The runner package executes parsed `.probe` requests over HTTP and aggregates
-// the per-case outcome consumed by the reporter.
+// The runner package executes parsed `.probe` requests over HTTP, runs the
+// assertion engine over the response and aggregates the per-case outcome
+// consumed by the reporter.
 
 import {
   "MoonProbe/parser",
+  "MoonProbe/assert",
 }
 
 import {
