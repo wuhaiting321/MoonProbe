@@ -1,4 +1,11 @@
-// import {
-//   "MoonProbe/parser",
-//   "MoonProbe/assert",
-// }
+// The runner package executes parsed `.probe` requests over HTTP and aggregates
+// the per-case outcome consumed by the reporter.
+
+import {
+  "MoonProbe/parser",
+}
+
+import {
+  "MoonProbe/parser",
+  "moonbitlang/core/test",
+} for "test"
