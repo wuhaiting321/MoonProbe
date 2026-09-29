@@ -1,2 +1,4 @@
-// The parser package depends only on the standard library.
-// No intra-module imports are required at present.
+// The parser package depends only on core test utilities (used by unit tests).
+import {
+  "moonbitlang/core/test",
+} for "test"
