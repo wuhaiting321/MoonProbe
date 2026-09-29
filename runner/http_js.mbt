@@ -39,7 +39,8 @@ extern "js" fn host_http(
   #|     const i = out.lastIndexOf("\n");
   #|     return "OK\n" + out.slice(i + 1) + "\n" + out.slice(0, i);
   #|   } catch (e) {
-  #|     return "ERR\n" + String(e.message || e);
+  #|     const detail = e && e.stderr ? String(e.stderr) : String((e && e.message) || e);
+  #|     return "ERR\n" + detail.trim().replace(/\r?\n/g, " ");
   #|   }
   #| })
 
@@ -74,8 +75,9 @@ fn parse_status(s : String) -> Option[Int] {
 /// Perform the request through `curl` and decode its reply into
 /// `(status, body)`.
 ///
-/// The reply is `OK\n<status>\n<body>` on success and `ERR\n<message>` when the
-/// transport itself failed.
+/// The reply is `OK\n<status>\n<body>` on success and `ERR\n<reason>` when the
+/// transport itself failed. Only the success form is split further: a failure
+/// reason is a sentence, not a set of fields, so it is reported whole.
 #cfg(target="js")
 fn send(
   verb : String,
@@ -86,12 +88,12 @@ fn send(
 ) -> Result[(Int, String), String] {
   let raw = host_http(verb, url, headers, body, (timeout_ms + 999) / 1000)
   let (tag, rest) = split_first_line(raw)
-  let (payload, response_body) = split_first_line(rest)
   if tag == "OK" {
-    match parse_status(payload) {
+    let (status_text, response_body) = split_first_line(rest)
+    match parse_status(status_text) {
       Some(status) => return Ok((status, response_body))
-      None => return Err("transport reported a malformed status: \{payload}")
+      None => return Err("transport reported a malformed status: \{status_text}")
     }
   }
-  return Err("http request failed: \{payload}")
+  return Err("http request failed: \{rest}")
 }
