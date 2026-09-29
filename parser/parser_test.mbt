@@ -81,6 +81,29 @@ const FX_FOUR_SPACE_INDENT : String =
 const FX_TAB_INDENT : String =
   "name: tabbed\nrequest:\n\turl: \"https://a.api.test/tab\"\nexpect:\n\tstatus: 204\n"
 
+/// A case that extracts a variable with the inline `set:` form.
+const FX_SET_INLINE : String =
+  #|name: login
+  #|request:
+  #|  method: POST
+  #|  url: "https://a.api.test/login"
+  #|expect:
+  #|  status: 200
+  #|  set: token = data.access_token
+  #|
+
+/// A case that extracts two variables with the block `set:` form.
+const FX_SET_BLOCK : String =
+  #|name: profile
+  #|request:
+  #|  url: "https://a.api.test/profile"
+  #|expect:
+  #|  status: 200
+  #|  set:
+  #|    userId: data.user.id
+  #|    token: data.access_token
+  #|
+
 // ---------------------------------------------------------------------------
 // Invalid fixtures
 // ---------------------------------------------------------------------------
@@ -134,6 +157,26 @@ const FX_ERR_UNKNOWN_FIELD : String =
 
 /// A line that is not a `key: value` pair at all.
 const FX_ERR_NO_COLON : String = "this line has no colon\n"
+
+/// An inline `set:` without the `name = json.path` assignment.
+const FX_ERR_SET_NO_ASSIGN : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  set: token
+  #|
+
+/// A block `set:` that declares no children.
+const FX_ERR_SET_EMPTY_BLOCK : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  set:
+  #|
 
 // ---------------------------------------------------------------------------
 // Lexer tests
@@ -285,6 +328,38 @@ test "parse accepts tab indentation" {
   @test.assert_eq(suite.cases[0].expect.status.unwrap_or(-1), 204)
 }
 
+test "parse reads an inline set directive" {
+  let suite = match parse(FX_SET_INLINE) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  let e = suite.cases[0].expect
+  @test.assert_eq(e.sets.length(), 1)
+  @test.assert_eq(e.sets[0].name, "token")
+  @test.assert_eq(e.sets[0].path, "data.access_token")
+}
+
+test "parse reads a block set directive" {
+  let suite = match parse(FX_SET_BLOCK) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  let e = suite.cases[0].expect
+  @test.assert_eq(e.sets.length(), 2)
+  @test.assert_eq(e.sets[0].name, "userId")
+  @test.assert_eq(e.sets[0].path, "data.user.id")
+  @test.assert_eq(e.sets[1].name, "token")
+  @test.assert_eq(e.sets[1].path, "data.access_token")
+}
+
+test "parse leaves sets empty when no set directive is present" {
+  let suite = match parse(FX_DEFAULT_METHOD) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  @test.assert_eq(suite.cases[0].expect.sets.length(), 0)
+}
+
 // ---------------------------------------------------------------------------
 // Parser: invalid fixtures
 // ---------------------------------------------------------------------------
@@ -342,5 +417,19 @@ test "parse rejects an unknown request field" {
   match parse(FX_ERR_UNKNOWN_FIELD) {
     Err(_) => ()
     Ok(_) => fail("should reject unknown request field")
+  }
+}
+
+test "parse rejects an inline set without an assignment" {
+  match parse(FX_ERR_SET_NO_ASSIGN) {
+    Err(_) => ()
+    Ok(_) => fail("should reject set without an assignment")
+  }
+}
+
+test "parse rejects an empty set block" {
+  match parse(FX_ERR_SET_EMPTY_BLOCK) {
+    Err(_) => ()
+    Ok(_) => fail("should reject an empty set block")
   }
 }

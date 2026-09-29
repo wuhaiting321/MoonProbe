@@ -26,11 +26,21 @@ pub struct JsonCheck {
   expected : String
 }
 
+/// A variable extraction performed after a case succeeds, e.g.
+/// `set: token = data.token` binds the value found at the JSON path
+/// `data.token` to the variable name `token`.
+pub struct SetSpec {
+  name : String
+  path : String
+}
+
 /// The `expect:` block of a single `.probe` case.
 pub struct Expect {
   /// Expected HTTP status code. `None` means it was not declared.
   status : Option[Int]
   checks : Array[JsonCheck]
+  /// Variables extracted from the response body, in declaration order.
+  sets : Array[SetSpec]
 }
 
 /// One complete `.probe` test case: a request plus its expectations.

@@ -1,0 +1,28 @@
+# Variable extraction and chaining, verified against a real service.
+#
+# The first case reads `args.token` out of the response with a `set:` directive.
+# The second case then references that variable as `{{token}}` in its query, so
+# it only passes when the context was carried across the two cases.
+
+name: "1. read the token from the response"
+request:
+  method: GET
+  url: "https://httpbin.org/get"
+  query:
+    token: "demo-token-42"
+expect:
+  status: 200
+  json:
+    args.token: "demo-token-42"
+  set: token = args.token
+
+name: "2. send the extracted token back"
+request:
+  method: GET
+  url: "https://httpbin.org/get"
+  query:
+    echo: "{{token}}"
+expect:
+  status: 200
+  json:
+    args.echo: "demo-token-42"

@@ -21,7 +21,10 @@ test "build_url leaves a url without query parameters untouched" {
     #|  status: 200
     #|
   let request = request_of(source)
-  @test.assert_eq(@runner.build_url(request), "https://a.test/users")
+  @test.assert_eq(
+    @runner.build_url(request, @runner.new_context()),
+    "https://a.test/users",
+  )
 }
 
 test "build_url appends percent-encoded query parameters" {
@@ -37,7 +40,7 @@ test "build_url appends percent-encoded query parameters" {
     #|
   let request = request_of(source)
   @test.assert_eq(
-    @runner.build_url(request),
+    @runner.build_url(request, @runner.new_context()),
     "https://a.test/search?q=a%20b%2Bc&page=1",
   )
 }
@@ -54,8 +57,43 @@ test "build_url switches to & when the url already carries a query" {
     #|
   let request = request_of(source)
   @test.assert_eq(
-    @runner.build_url(request),
+    @runner.build_url(request, @runner.new_context()),
     "https://a.test/search?via=cli&page=2",
+  )
+}
+
+test "build_url expands a bound variable in the url and query values" {
+  let source =
+    #|name: "interpolated"
+    #|request:
+    #|  url: "https://a.test/users/{{id}}/profile"
+    #|  query:
+    #|    token: "{{token}}"
+    #|expect:
+    #|  status: 200
+    #|
+  let request = request_of(source)
+  let context = @runner.new_context()
+  context["id"] = "42"
+  context["token"] = "abc def"
+  @test.assert_eq(
+    @runner.build_url(request, context),
+    "https://a.test/users/42/profile?token=abc%20def",
+  )
+}
+
+test "build_url leaves an unbound placeholder verbatim" {
+  let source =
+    #|name: "unbound"
+    #|request:
+    #|  url: "https://a.test/{{missing}}"
+    #|expect:
+    #|  status: 200
+    #|
+  let request = request_of(source)
+  @test.assert_eq(
+    @runner.build_url(request, @runner.new_context()),
+    "https://a.test/{{missing}}",
   )
 }
 
@@ -72,7 +110,7 @@ test "run_request reports the missing transport on non-js backends" {
     #|  status: 200
     #|
   let request = request_of(source)
-  match @runner.run_request(request) {
+  match @runner.run_request(request, @runner.new_context()) {
     Err(_) => ()
     Ok(response) => fail("expected no transport, got status \{response.status}")
   }

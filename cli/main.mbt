@@ -30,21 +30,6 @@ fn suite_path(args : Array[String]) -> String? {
   return None
 }
 
-/// Run every case of `suite`, collecting the outcome of each one.
-///
-/// Returns `Err` as soon as a request cannot be performed at all, because the
-/// remaining cases would fail the same way.
-fn run_suite(suite : @parser.Suite) -> Result[Array[@runner.TestResult], String] {
-  let results : Array[@runner.TestResult] = []
-  for test_case in suite.cases {
-    match @runner.run_test(test_case) {
-      Ok(result) => results.push(result)
-      Err(msg) => return Err("\{test_case.name}: \{msg}")
-    }
-  }
-  return Ok(results)
-}
-
 fn main {
   let args = @env.args()
   let path = match suite_path(args) {
@@ -69,7 +54,7 @@ fn main {
     }
   }
   let started = @env.now()
-  let results = match run_suite(suite) {
+  let results = match @runner.run_suite(suite) {
     Ok(results) => results
     Err(msg) => {
       println("error: \{msg}")

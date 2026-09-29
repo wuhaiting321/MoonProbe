@@ -55,6 +55,27 @@ fn lookup_path(json : Json, path : String) -> Json? {
   return Some(current)
 }
 
+/// Read the scalar value addressed by a dotted path such as `data.count` from a
+/// JSON response body, rendered as text.
+///
+/// This is the read half of `check_json_path`, exposed so that the runner can
+/// also use it to extract variables declared by a `set:` directive.
+pub fn read_json_path(body : String, path : String) -> Result[String, String] {
+  let json = try {
+    @json.parse(body)
+  } catch {
+    err => return Err("response body is not valid json (\{err})")
+  }
+  let value = match lookup_path(json, path) {
+    Some(v) => v
+    None => return Err("path \"\{path}\" not found in the response body")
+  }
+  match json_text(value) {
+    Some(text) => Ok(text)
+    None => Err("path \"\{path}\" is not a scalar value and cannot be compared")
+  }
+}
+
 /// Compare one JSON field, addressed by a dotted path, against the text written
 /// in the `.probe` expectation.
 pub fn check_json_path(
@@ -62,21 +83,9 @@ pub fn check_json_path(
   path : String,
   expected : String
 ) -> Result[Unit, String] {
-  let json = try {
-    @json.parse(body)
-  } catch {
-    err => return Err("json: response body is not valid json (\{err})")
-  }
-  let value = match lookup_path(json, path) {
-    Some(v) => v
-    None => return Err("json: path \"\{path}\" not found in the response body")
-  }
-  let actual = match json_text(value) {
-    Some(text) => text
-    None =>
-      return Err(
-        "json: path \"\{path}\" is not a scalar value and cannot be compared",
-      )
+  let actual = match read_json_path(body, path) {
+    Ok(text) => text
+    Err(msg) => return Err("json: \{msg}")
   }
   if actual == expected {
     return Ok(())

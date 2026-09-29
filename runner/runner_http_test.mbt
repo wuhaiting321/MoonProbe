@@ -16,7 +16,7 @@ test "run_request performs a real http round trip" {
     Ok(suite) => suite.cases[0].request
     Err(msg) => fail("fixture should parse: \{msg}")
   }
-  let response = match @runner.run_request(request) {
+  let response = match @runner.run_request(request, @runner.new_context()) {
     Ok(r) => r
     Err(msg) => fail("request should succeed: \{msg}")
   }
@@ -37,7 +37,7 @@ test "run_request surfaces transport failures as Err" {
     Ok(suite) => suite.cases[0].request
     Err(msg) => fail("fixture should parse: \{msg}")
   }
-  match @runner.run_request(request, timeout_ms=5000) {
+  match @runner.run_request(request, @runner.new_context(), timeout_ms=5000) {
     Err(_) => ()
     Ok(response) => fail("expected a transport error, got \{response.status}")
   }
@@ -61,7 +61,7 @@ test "run_test reports a passing case end to end" {
     #|expect:
     #|  status: 200
     #|
-  let result = match @runner.run_test(case_of(source)) {
+  let result = match @runner.run_test(case_of(source), @runner.new_context()) {
     Ok(r) => r
     Err(msg) => fail("case should run: \{msg}")
   }
@@ -81,10 +81,64 @@ test "run_test carries the assertion failures of a mismatching case" {
     #|  json:
     #|    missing: "nope"
     #|
-  let result = match @runner.run_test(case_of(source)) {
+  let result = match @runner.run_test(case_of(source), @runner.new_context()) {
     Ok(r) => r
     Err(msg) => fail("case should run: \{msg}")
   }
   @test.assert_eq(result.passed(), false)
   @test.assert_eq(result.failures.length(), 2)
+}
+
+#cfg(target="js")
+test "run_suite executes every case and shares one context" {
+  let source =
+    #|name: "suite first"
+    #|request:
+    #|  url: "https://example.com"
+    #|expect:
+    #|  status: 200
+    #|name: "suite second"
+    #|request:
+    #|  url: "https://example.com"
+    #|expect:
+    #|  status: 200
+    #|
+  let suite = match @parser.parse(source) {
+    Ok(s) => s
+    Err(msg) => fail("fixture should parse: \{msg}")
+  }
+  let results = match @runner.run_suite(suite) {
+    Ok(r) => r
+    Err(msg) => fail("suite should run: \{msg}")
+  }
+  @test.assert_eq(results.length(), 2)
+  @test.assert_eq(results[0].name, "suite first")
+  @test.assert_eq(results[1].name, "suite second")
+  @test.assert_eq(results[0].passed(), true)
+  @test.assert_eq(results[1].passed(), true)
+}
+
+#cfg(target="js")
+test "run_test records a failed extraction as a failure" {
+  let source =
+    #|name: "bad extraction"
+    #|request:
+    #|  url: "https://example.com"
+    #|expect:
+    #|  status: 200
+    #|  set: token = data.token
+    #|
+  // example.com answers with HTML, so the path cannot be read: the case must
+  // fail with an extraction message rather than abort the whole run.
+  let context = @runner.new_context()
+  let result = match @runner.run_test(case_of(source), context) {
+    Ok(r) => r
+    Err(msg) => fail("case should run: \{msg}")
+  }
+  @test.assert_eq(result.passed(), false)
+  @test.assert_eq(result.failures.length(), 1)
+  match context.get("token") {
+    None => ()
+    Some(v) => fail("token should not be bound, got \{v}")
+  }
 }

@@ -5,6 +5,7 @@
 import {
   "MoonProbe/parser",
   "MoonProbe/assert",
+  "moonbitlang/core/env",
 }
 
 import {

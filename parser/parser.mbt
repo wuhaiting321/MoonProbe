@@ -18,6 +18,7 @@
 ///   json:
 ///     code: 0
 ///     data.count: 3
+///   set: token = data.access_token   # --- variable extraction ---
 /// ```
 ///
 /// Higher-level concerns (executing the requests, running assertions) live in
@@ -212,6 +213,7 @@ fn parse_expect(
 ) -> (Result[Expect, String], Int) {
   let mut status : Option[Int] = None
   let mut checks : Array[JsonCheck] = []
+  let sets : Array[SetSpec] = []
   let field_indent = child_indent_of(lines, start, parent_indent)
   let mut i = start
   while i < lines.length() {
@@ -238,6 +240,46 @@ fn parse_expect(
           i = ni
           continue
         }
+        "set" => {
+          match line.value {
+            Some(inline) => {
+              // Inline form: `set: token = data.token`
+              match split_assignment(inline) {
+                Some((name, path)) => sets.push({ name, path })
+                None =>
+                  return (
+                    Err(
+                      "line \{line.line_no}: set expects \"name = json.path\", got \"\{inline}\"",
+                    ),
+                    i + 1,
+                  )
+              }
+              i = i + 1
+            }
+            None => {
+              // Block form:
+              //   set:
+              //     token: data.token
+              let (pairs, ni) = parse_pairs(lines, i + 1, line.indent)
+              if pairs.length() == 0 {
+                return (Err("line \{line.line_no}: set block is empty"), i + 1)
+              }
+              for p in pairs {
+                if p.value.length() == 0 {
+                  return (
+                    Err(
+                      "line \{line.line_no}: set \"\{p.key}\" needs a json path",
+                    ),
+                    ni,
+                  )
+                }
+                sets.push({ name: p.key, path: p.value })
+              }
+              i = ni
+            }
+          }
+          continue
+        }
         _ => {
           return (
             Err("line \{line.line_no}: unknown expect field \"\{line.key}\""),
@@ -250,7 +292,23 @@ fn parse_expect(
       i = i + 1
     }
   }
-  return (Ok({ status, checks }), i)
+  return (Ok({ status, checks, sets }), i)
+}
+
+/// Split an inline `name = json.path` assignment on the first `=`, trimming
+/// both sides. Returns `None` when either side is empty.
+fn split_assignment(s : String) -> Option[(String, String)] {
+  match s.split_once("=") {
+    Some((name, path)) => {
+      let n = name.trim().to_owned()
+      let p = path.trim().to_owned()
+      if n.length() == 0 || p.length() == 0 {
+        return None
+      }
+      return Some((n, p))
+    }
+    None => None
+  }
 }
 
 /// Collect a list of `key: value` pairs that are direct children of the line
