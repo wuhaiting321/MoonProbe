@@ -1,5 +1,6 @@
-// import {
-//   "MoonProbe/parser",
-//   "MoonProbe/assert",
-//   "MoonProbe/runner",
-// }
+// The reporter turns a finished run into human-readable output. It only needs
+// the per-case outcome from the runner, never the parser or the network.
+
+import {
+  "MoonProbe/runner",
+}
