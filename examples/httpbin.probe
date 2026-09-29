@@ -1,0 +1,21 @@
+# MoonProbe example: query parameters, headers and JSON body assertions.
+#
+# httpbin.org echoes the whole request back, so the response lets us assert on
+# the query string we sent and on nested JSON fields.
+# Run it with:  moon run cli --target js -- examples/httpbin.probe
+
+name: "httpbin echoes the query parameters"
+request:
+  method: GET
+  url: "https://httpbin.org/get"
+  headers:
+    Accept: "application/json"
+  query:
+    suite: "moonprobe"
+    page: 1
+expect:
+  status: 200
+  json:
+    args.suite: "moonprobe"
+    args.page: 1
+    url: "https://httpbin.org/get?suite=moonprobe&page=1"

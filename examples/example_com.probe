@@ -1,0 +1,11 @@
+# MoonProbe example: the smallest useful suite.
+#
+# One GET request and one exact status-code assertion.
+# Run it with:  moon run cli --target js -- examples/example_com.probe
+
+name: "example.com answers with 200"
+request:
+  method: GET
+  url: "https://example.com"
+expect:
+  status: 200

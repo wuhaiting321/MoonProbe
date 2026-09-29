@@ -1,8 +1,11 @@
-// import {
-//   "MoonProbe/parser",
-//   "MoonProbe/runner",
-//   "MoonProbe/assert",
-//   "MoonProbe/reporter",
-// }
+// The cli package is the executable entry point: it reads a `.probe` file,
+// parses it, executes every case through the runner and prints the report.
+
+import {
+  "MoonProbe/parser",
+  "MoonProbe/runner",
+  "MoonProbe/reporter",
+  "moonbitlang/core/env",
+}
 
 pkgtype(kind: "executable")
