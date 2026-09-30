@@ -27,8 +27,10 @@
 ///|
 /// Parse `.probe` source text into an AST suite.
 ///
-/// A `config:` block may open the file, before the first `name:` line; it holds
-/// the suite-wide defaults that the runner merges into every case.
+/// Three preamble blocks may open the file, before the first `name:` line:
+/// `config:`, which holds the suite-wide defaults the runner merges into every
+/// case, and `before_each: ` / `after_each:`, which hold the steps the runner
+/// performs around every case of the file.
 pub fn parse(src : String) -> Result[Suite, String] {
   let lines = match lex(src) {
     Ok(v) => v
@@ -39,6 +41,8 @@ pub fn parse(src : String) -> Result[Suite, String] {
   }
   let cases : Array[Case] = []
   let mut config : Config? = None
+  let mut before_hooks : Array[Case]? = None
+  let mut after_hooks : Array[Case]? = None
   let mut i = 0
   while i < lines.length() {
     let line = lines[i]
@@ -61,6 +65,44 @@ pub fn parse(src : String) -> Result[Suite, String] {
       i = next
       continue
     }
+    if line.key == "before_each" || line.key == "after_each" {
+      // Hooks are preamble too, and for the same reason: a hook declared after
+      // the first case would leave that case unhooked, which reads as a bug in
+      // the file rather than as an intention.
+      if cases.length() > 0 {
+        return Err(
+          "line \{line.line_no}: the \{line.key} block must appear before the first case",
+        )
+      }
+      let existing = if line.key == "before_each" {
+        before_hooks
+      } else {
+        after_hooks
+      }
+      match existing {
+        Some(_) =>
+          return Err("line \{line.line_no}: duplicate \{line.key} block")
+        None => ()
+      }
+      let (parsed, next) = parse_hook_cases(
+        lines,
+        i + 1,
+        line.indent,
+        line.key,
+        line.line_no,
+      )
+      let steps = match parsed {
+        Ok(v) => v
+        Err(msg) => return Err(msg)
+      }
+      if line.key == "before_each" {
+        before_hooks = Some(steps)
+      } else {
+        after_hooks = Some(steps)
+      }
+      i = next
+      continue
+    }
     if line.key != "name" {
       return Err(
         "line \{line.line_no}: unexpected top-level key \"\{line.key}\"",
@@ -73,7 +115,7 @@ pub fn parse(src : String) -> Result[Suite, String] {
     // Advance past the name line and collect request/expect blocks until the
     // next `name:` line at the same depth.
     i = i + 1
-    let (case_result, next) = parse_case(name, lines, i, 0)
+    let (case_result, next) = parse_case(name, lines, i, 0, true)
     cases.push(
       match case_result {
         Ok(c) => c
@@ -89,7 +131,117 @@ pub fn parse(src : String) -> Result[Suite, String] {
     Some(c) => c
     None => default_config()
   }
-  return Ok({ config: resolved, cases, })
+  return Ok({
+    config: resolved,
+    cases,
+    before_each: before_hooks.unwrap_or([]),
+    after_each: after_hooks.unwrap_or([]),
+  })
+}
+
+///|
+/// Parse a `before_each:` / `after_each:` block, whose direct children are
+/// complete cases — one `name:` per step:
+///
+/// ```text
+/// before_each:
+///   name: "sign in"                # --- one step, a full case ---
+///   request:
+///     method: POST
+///     url: "/login"
+///   expect:
+///     status: 200
+///     set: token = data.access_token
+/// ```
+///
+/// Reusing the case grammar gives a hook everything a case has: it may send a
+/// body, assert on the reply, and bind variables with `set:`, which is what
+/// makes a login step usable by the cases that follow it.
+///
+/// `block_line` is the line number of the `before_each:` line itself, so the
+/// "empty block" message can point at it.
+fn parse_hook_cases(
+  lines : Array[LexedLine],
+  start : Int,
+  parent_indent : Int,
+  block : String,
+  block_line : Int,
+) -> (Result[Array[Case], String], Int) {
+  if start >= lines.length() || lines[start].indent <= parent_indent {
+    return (
+      Err(
+        "line \{block_line}: the \{block} block is empty, e.g. \"\{block}:\" followed by a \"name:\" step",
+      ),
+      start,
+    )
+  }
+  let steps : Array[Case] = []
+  let step_indent = lines[start].indent
+  let mut i = start
+  while i < lines.length() && lines[i].indent == step_indent {
+    let line = lines[i]
+    if line.key != "name" {
+      return (
+        Err(
+          "line \{line.line_no}: a \{block} step must start with \"name:\", got \"\{line.key}:\"",
+        ),
+        i + 1,
+      )
+    }
+    let name = line.value.unwrap_or("")
+    if name.length() == 0 {
+      return (
+        Err("line \{line.line_no}: \{block} step name must not be empty"),
+        i + 1,
+      )
+    }
+    // A step is a case, so it is read with the same routine — but hooks the step
+    // itself declared would never run, so those are rejected there instead.
+    let (parsed, next) = parse_case(name, lines, i + 1, step_indent, false)
+    match parsed {
+      Ok(step) => steps.push(step)
+      Err(msg) => return (Err(msg), next)
+    }
+    i = next
+  }
+  return (Ok(steps), i)
+}
+
+///|
+/// The largest retry budget a `.probe` file may declare.
+///
+/// A request is retried immediately rather than after a delay, so an absurd
+/// budget would not fail — it would hang the run. The cap keeps a typo such as
+/// `retry: 100000` from turning a build job into a timeout.
+const MAX_RETRY_COUNT : Int = 10
+
+///|
+/// Parse a `retry:` field, shared by the config block and a request block so
+/// that both accept exactly the same values and report the same errors.
+fn parse_retry_count(line : LexedLine) -> Result[Int, String] {
+  let value = match line.value {
+    Some(v) => v
+    None =>
+      return Err(
+        "line \{line.line_no}: retry requires a value, i.e. how many extra attempts are allowed",
+      )
+  }
+  match parse_int(value) {
+    Some(n) =>
+      if n < 0 {
+        return Err("line \{line.line_no}: retry must not be negative")
+      } else if n > MAX_RETRY_COUNT {
+        return Err(
+          "line \{line.line_no}: retry must not exceed \{MAX_RETRY_COUNT}",
+        )
+      } else {
+        return Ok(n)
+      }
+    None =>
+      return Err(
+        "line \{line.line_no}: invalid retry \"\{value}\", expected a number of extra attempts",
+      )
+  }
 }
 
 ///|
@@ -114,6 +266,7 @@ fn parse_config(
 ) -> (Result[Config, String], Int) {
   let mut base_url : String? = None
   let mut timeout_ms : Int? = None
+  let mut retry_count : Int? = None
   let mut headers : Array[Pair] = []
   let field_indent = child_indent_of(lines, start, parent_indent)
   if field_indent < 0 {
@@ -184,6 +337,11 @@ fn parse_config(
             )
         }
       }
+      "retry" =>
+        retry_count = match parse_retry_count(line) {
+          Ok(n) => Some(n)
+          Err(msg) => return (Err(msg), i + 1)
+        }
       "global_headers" => {
         let (pairs, ni) = parse_pairs(lines, i + 1, line.indent)
         headers = pairs
@@ -199,7 +357,12 @@ fn parse_config(
     i = i + 1
   }
   return (
-    Ok({ base_url, global_headers: headers, global_timeout_ms: timeout_ms, }),
+    Ok({
+      base_url,
+      global_headers: headers,
+      global_timeout_ms: timeout_ms,
+      retry_count,
+    }),
     i,
   )
 }
@@ -262,14 +425,22 @@ fn child_indent_of(
 
 ///|
 /// Parse the request + expect blocks belonging to one case.
+///
+/// `allow_hooks` is false while a `before_each:` / `after_each:` block is being
+/// read: a step there is a case like any other, except that the runner would
+/// never reach hooks the step declared of its own, so accepting them would mean
+/// silently doing nothing.
 fn parse_case(
   names : String,
   lines : Array[LexedLine],
   start : Int,
   parent_indent : Int,
+  allow_hooks : Bool,
 ) -> (Result[Case, String], Int) {
   let mut request : Request? = None
   let mut expect : Expect? = None
+  let mut before_hooks : Array[Case]? = None
+  let mut after_hooks : Array[Case]? = None
   let mut i = start
   while i < lines.length() {
     let line = lines[i]
@@ -294,15 +465,57 @@ fn parse_case(
           Err(msg) => return (Err(msg), i)
         }
         i = ni
-      } else if line.key == "config" {
-        // Reached only when a `config:` block follows a case: the preamble slot
-        // is the top of the file, and it has already gone by.
-        return (
-          Err(
-            "line \{line.line_no}: the config block must appear before the first case",
-          ),
+      } else if line.key == "config" ||
+        line.key == "before_each" ||
+        line.key == "after_each" {
+        if !allow_hooks {
+          return (
+            Err(
+              "line \{line.line_no}: a hook step cannot declare its own \"\{line.key}:\" block",
+            ),
+            i + 1,
+          )
+        }
+        if line.key == "config" {
+          // Reached only when a `config:` block follows a case: the preamble slot
+          // is the top of the file, and it has already gone by.
+          return (
+            Err(
+              "line \{line.line_no}: the config block must appear before the first case",
+            ),
+            i + 1,
+          )
+        }
+        let existing = if line.key == "before_each" {
+          before_hooks
+        } else {
+          after_hooks
+        }
+        match existing {
+          Some(_) =>
+            return (
+              Err("line \{line.line_no}: duplicate \{line.key} block"),
+              i + 1,
+            )
+          None => ()
+        }
+        let (h, ni) = parse_hook_cases(
+          lines,
           i + 1,
+          line.indent,
+          line.key,
+          line.line_no,
         )
+        let steps = match h {
+          Ok(v) => v
+          Err(msg) => return (Err(msg), ni)
+        }
+        if line.key == "before_each" {
+          before_hooks = Some(steps)
+        } else {
+          after_hooks = Some(steps)
+        }
+        i = ni
       } else {
         return (
           Err("line \{line.line_no}: unknown case key \"\{line.key}\""),
@@ -322,7 +535,16 @@ fn parse_case(
     Some(e) => e
     None => return (Err("case \"\{names}\": missing expect block"), i)
   }
-  return (Ok({ name: names, request: req, expect: exp, }), i)
+  return (
+    Ok({
+      name: names,
+      request: req,
+      expect: exp,
+      before_each: before_hooks.unwrap_or([]),
+      after_each: after_hooks.unwrap_or([]),
+    }),
+    i,
+  )
 }
 
 ///|
@@ -339,6 +561,7 @@ fn parse_request(
   let mut headers : Array[Pair] = []
   let mut query : Array[Pair] = []
   let mut timeout_ms : Int? = None
+  let mut retry_count : Int? = None
   let field_indent = child_indent_of(lines, start, parent_indent)
   let mut i = start
   while i < lines.length() {
@@ -403,6 +626,11 @@ fn parse_request(
               )
           }
         }
+        "retry" =>
+          retry_count = match parse_retry_count(line) {
+            Ok(n) => Some(n)
+            Err(msg) => return (Err(msg), i + 1)
+          }
         _ =>
           return (
             Err("line \{line.line_no}: unknown request field \"\{line.key}\""),
@@ -418,7 +646,10 @@ fn parse_request(
     Some(v) => v
     None => return (Err("request: missing url"), i)
   }
-  return (Ok({ http_method, url: u, headers, query, body, timeout_ms, }), i)
+  return (
+    Ok({ http_method, url: u, headers, query, body, timeout_ms, retry_count, }),
+    i,
+  )
 }
 
 ///|

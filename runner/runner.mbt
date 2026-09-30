@@ -24,6 +24,25 @@ pub struct Response {
   headers : Array[(String, String)]
   /// The raw response body, as text.
   body : String
+  /// Clock reading taken immediately before the transport call that produced
+  /// this response, in milliseconds.
+  started_at_ms : UInt64
+  /// Clock reading taken immediately after that call returned.
+  finished_at_ms : UInt64
+  /// How many transport calls were made to obtain this response: 1 when the
+  /// first attempt was good enough, more when a retry was spent.
+  attempts : Int
+}
+
+///|
+/// How long the transport call that produced this response took, in milliseconds.
+///
+/// The two timestamps are read either side of the call and of nothing else, so
+/// this is the server's own latency — not the time spent expanding placeholders
+/// or merging the config, and not the time the assertion engine then needs. It is
+/// the number a `duration_ms` expectation is compared against.
+pub fn Response::elapsed_ms(self : Response) -> UInt64 {
+  return self.finished_at_ms - self.started_at_ms
 }
 
 ///|
@@ -35,6 +54,16 @@ pub fn new_context() -> Map[String, String] {
 ///|
 /// The default per-request timeout, in milliseconds.
 pub const DEFAULT_TIMEOUT_MS : Int = 5000
+
+///|
+/// The default retry budget: how many extra attempts a request gets.
+///
+/// One retry is the sweet spot for a contract suite. It absorbs the transient
+/// half of real-world flakiness — a cold start, a connection the load balancer
+/// dropped, a single 502 — without letting a genuinely broken service quadruple
+/// the runtime of every run. A `.probe` file that wants a different trade-off
+/// declares it: `retry: 0` to fail fast, `retry: 3` for a flaky staging host.
+pub const DEFAULT_RETRY_COUNT : Int = 1
 
 ///|
 /// Look an environment variable up in the real environment.
@@ -266,6 +295,86 @@ fn env_fallback_of(inner : String) -> String? {
 }
 
 // ---------------------------------------------------------------------------
+// Retrying
+// ---------------------------------------------------------------------------
+
+///|
+/// The transport contract: perform one request and report
+/// `(status, headers, body)`, or a message explaining why no request could be
+/// completed.
+///
+/// Naming the shape lets the retry loop accept the platform `send` on a real run
+/// and a scripted stand-in in a test, so the retry rules can be exercised on a
+/// backend that has no network at all.
+pub type Transport = (String, String, String, String, Int) -> Result[
+  (Int, Array[(String, String)], String),
+  String,
+]
+
+///|
+/// Whether a response is worth another attempt.
+///
+/// Only a 5xx is retried, because only a 5xx says "the server broke, ask again".
+/// A 4xx says the request itself is wrong, and a wrong request stays wrong however
+/// many times it is sent — retrying it would just delay the report by the timeout
+/// and hide the real problem behind a second identical failure. The 500..599
+/// bounds also keep a non-standard status such as `0` or `999` out of the retry
+/// set: only the range that the HTTP specification defines as server error does.
+pub fn is_retriable_status(status : Int) -> Bool {
+  return status >= 500 && status <= 599
+}
+
+///|
+/// Send a request through `transport`, retrying the attempts that deserve it.
+///
+/// An attempt is repeated when either the transport could not complete at all
+/// (a refused connection, a DNS failure, a timeout) or the server answered with a
+/// 5xx; anything else is returned immediately, and so is the last attempt
+/// whatever it says — a budget is a limit, not a promise.
+///
+/// The two timestamps are read around the call itself, so `attempts` and
+/// `elapsed_ms` describe the attempt that produced the returned response rather
+/// than the whole retry sequence.
+pub fn send_with_retry(
+  transport : Transport,
+  verb : String,
+  url : String,
+  headers : String,
+  body : String,
+  timeout_ms : Int,
+  retry_count : Int,
+) -> Result[Response, String] {
+  // A negative budget can only come from a caller driving the runner by hand; it
+  // means "no retries", never "retry forever".
+  let budget = if retry_count < 0 { 0 } else { retry_count }
+  let mut attempt = 0
+  while attempt <= budget {
+    let started = @env.now()
+    let outcome = transport(verb, url, headers, body, timeout_ms)
+    let finished = @env.now()
+    // A transport that never reached the server is the case retries exist for, so
+    // it counts as retriable; a reply only does when the server blamed itself.
+    let exhausted = attempt >= budget
+    match outcome {
+      Ok((status, response_headers, response_body)) =>
+        if exhausted || !is_retriable_status(status) {
+          return Ok({
+            status,
+            headers: response_headers,
+            body: response_body,
+            started_at_ms: started,
+            finished_at_ms: finished,
+            attempts: attempt + 1,
+          })
+        }
+      Err(msg) => if exhausted { return Err(msg) }
+    }
+    attempt = attempt + 1
+  }
+  abort("the retry loop returns on its final attempt")
+}
+
+// ---------------------------------------------------------------------------
 // Config resolution
 // ---------------------------------------------------------------------------
 
@@ -290,6 +399,8 @@ pub struct ResolvedRequest {
   body : String
   /// Effective timeout, in milliseconds.
   timeout_ms : Int
+  /// Effective retry budget: how many extra attempts this request may have.
+  retry_count : Int
 }
 
 ///|
@@ -408,8 +519,9 @@ fn merge_headers(
 ///|
 /// Resolve a case request against the suite config.
 ///
-/// Precedence, most specific first: the case's own `timeout:`, then the config
-/// block's `global_timeout`, then the timeout the caller passed to the runner.
+/// Precedence, most specific first, for both the timeout and the retry budget:
+/// the case's own declaration, then the config block's, then the value the caller
+/// passed to the runner.
 ///
 /// `Err` is returned for a request that cannot be turned into a call at all — a
 /// relative URL with no `base_url` to resolve it against.
@@ -417,6 +529,7 @@ pub fn resolve_request(
   request : @parser.Request,
   config : @parser.Config,
   timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
+  retry_count? : Int = DEFAULT_RETRY_COUNT,
 ) -> Result[ResolvedRequest, String] {
   let url = match join_base_url(config.base_url, request.url) {
     Ok(u) => u
@@ -431,6 +544,14 @@ pub fn resolve_request(
         None => timeout_ms
       }
   }
+  let retries = match request.retry_count {
+    Some(own) => own
+    None =>
+      match config.retry_count {
+        Some(global) => global
+        None => retry_count
+      }
+  }
   let query : Array[(String, String)] = []
   for pair in request.query {
     query.push((pair.key, pair.value))
@@ -442,6 +563,7 @@ pub fn resolve_request(
     query,
     body: request.body.unwrap_or(""),
     timeout_ms: effective,
+    retry_count: retries,
   })
 }
 
@@ -524,18 +646,47 @@ pub fn header_lines(
 }
 
 ///|
-/// Perform one HTTP request, aborting after the resolved timeout.
+/// Perform one HTTP request through the platform transport, aborting after the
+/// resolved timeout.
 ///
 /// The request is resolved — config merge, base URL join, header merge,
-/// placeholder expansion — and then handed to the per-target `send`, which is
-/// the only part that needs a platform transport.
+/// placeholder expansion — and then handed to the per-target `send`, which is the
+/// only part that needs a real network.
 pub fn run_request(
   request : @parser.Request,
   config : @parser.Config,
   context : Map[String, String],
   timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
+  retry_count? : Int = DEFAULT_RETRY_COUNT,
 ) -> Result[Response, String] {
-  let resolved = match resolve_request(request, config, timeout_ms~) {
+  return run_request_with(
+    send,
+    request,
+    config,
+    context,
+    timeout_ms~,
+    retry_count~,
+  )
+}
+
+///|
+/// Perform one HTTP request through a caller-supplied transport.
+///
+/// Everything a run does to a request happens here — resolving it against the
+/// config, expanding its placeholders, joining its URL, and retrying the attempts
+/// that deserve it — so that a test can drive the whole path with a scripted
+/// transport and observe what would have been sent, on a backend that has no
+/// network. `run_request` is this function bound to the real `send`.
+pub fn run_request_with(
+  transport : Transport,
+  request : @parser.Request,
+  config : @parser.Config,
+  context : Map[String, String],
+  timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
+  retry_count? : Int = DEFAULT_RETRY_COUNT,
+) -> Result[Response, String] {
+  let resolved = match
+    resolve_request(request, config, timeout_ms~, retry_count~) {
     Ok(r) => r
     Err(msg) => return Err(msg)
   }
@@ -552,11 +703,15 @@ pub fn run_request(
     Ok(b) => b
     Err(msg) => return Err(msg)
   }
-  match send(resolved.http_method, url, headers, body, resolved.timeout_ms) {
-    Ok((status, response_headers, response_body)) =>
-      Ok({ status, headers: response_headers, body: response_body, })
-    Err(msg) => Err(msg)
-  }
+  return send_with_retry(
+    transport,
+    resolved.http_method,
+    url,
+    headers,
+    body,
+    resolved.timeout_ms,
+    resolved.retry_count,
+  )
 }
 
 // ---------------------------------------------------------------------------

@@ -23,6 +23,9 @@ pub struct Request {
   /// Case-level timeout in milliseconds, which wins over the config block's
   /// `global_timeout`. `None` means the case did not declare one.
   timeout_ms : Int?
+  /// How many extra attempts this request may have, which wins over the config
+  /// block's `retry`. `None` means the case did not declare its own budget.
+  retry_count : Int?
 }
 
 ///|
@@ -70,6 +73,8 @@ pub struct Config {
   global_headers : Array[Pair]
   /// Per-request timeout for every case, in milliseconds.
   global_timeout_ms : Int?
+  /// Retry budget for every case, overridden by a case's own `retry:`.
+  retry_count : Int?
 }
 
 ///|
@@ -78,14 +83,19 @@ pub struct Config {
 /// This is what a `.probe` file that declares no `config:` block parses into,
 /// and it is what a caller that drives the runner by hand starts from.
 pub fn default_config() -> Config {
-  return { base_url: None, global_headers: [], global_timeout_ms: None, }
+  return {
+    base_url: None,
+    global_headers: [],
+    global_timeout_ms: None,
+    retry_count: None,
+  }
 }
 
 ///|
 /// Whether the config block declares nothing at all.
 pub fn Config::is_empty(self : Config) -> Bool {
-  match (self.base_url, self.global_timeout_ms) {
-    (None, None) => self.global_headers.length() == 0
+  match (self.base_url, self.global_timeout_ms, self.retry_count) {
+    (None, None, None) => self.global_headers.length() == 0
     _ => false
   }
 }
@@ -202,6 +212,10 @@ pub struct Case {
   name : String
   request : Request
   expect : Expect
+  /// Steps to run before this case, declared by the case itself.
+  before_each : Array[Case]
+  /// Steps to run after this case, declared by the case itself.
+  after_each : Array[Case]
 }
 
 ///|
@@ -210,4 +224,8 @@ pub struct Suite {
   /// The `config:` block, or the empty config when the file declares none.
   config : Config
   cases : Array[Case]
+  /// Steps run before every case of the file.
+  before_each : Array[Case]
+  /// Steps run after every case of the file, even when the case failed.
+  after_each : Array[Case]
 }

@@ -76,7 +76,7 @@ test "run_test reports a passing case end to end" {
     Err(msg) => fail("case should run: \{msg}")
   }
   @test.assert_eq(result.name, "end to end")
-  @test.assert_eq(result.response.status, 200)
+  @test.assert_eq(result.response.unwrap().status, 200)
   @test.assert_eq(result.passed(), true)
 }
 
