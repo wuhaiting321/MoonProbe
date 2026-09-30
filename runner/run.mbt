@@ -5,6 +5,7 @@
 /// one, runs its expectation block and threads a single variable context through
 /// the whole run so that a later case can use what an earlier one extracted.
 
+///|
 /// The outcome of executing a single `.probe` case.
 pub struct TestResult {
   /// The case name as declared in the `.probe` source.
@@ -14,15 +15,19 @@ pub struct TestResult {
   /// Failure messages collected by the assertion engine. An empty array means
   /// the case passed.
   failures : Array[String]
-  /// Wall-clock duration of this case, in milliseconds.
+  /// Wall-clock duration of the request itself, in milliseconds. It is measured
+  /// around the transport call only, so it is what a `duration_ms` expectation
+  /// is compared against and what the JUnit report shows as the case time.
   elapsed_ms : UInt64
 }
 
+///|
 /// Whether every assertion of the case held.
 pub fn TestResult::passed(self : TestResult) -> Bool {
   return self.failures.length() == 0
 }
 
+///|
 /// Execute one `.probe` case end to end: request, then assertions, then the
 /// `set:` extractions.
 ///
@@ -37,17 +42,21 @@ pub fn TestResult::passed(self : TestResult) -> Bool {
 pub fn run_test(
   test_case : @parser.Case,
   context : Map[String, String],
-  timeout_ms? : Int = DEFAULT_TIMEOUT_MS
+  timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
 ) -> Result[TestResult, String] {
   let started = @env.now()
   let response = match run_request(test_case.request, context, timeout_ms~) {
     Ok(r) => r
     Err(msg) => return Err(msg)
   }
+  // Measured around the transport call only: a `duration_ms` expectation is a
+  // budget on the server, not on the assertion engine.
+  let elapsed_ms = @env.now() - started
   let failures = @assert.check_expect(
     test_case.expect,
     response.status,
     response.body,
+    elapsed_ms,
   )
   for spec in test_case.expect.sets {
     match @assert.read_json_path(response.body, spec.path) {
@@ -55,21 +64,17 @@ pub fn run_test(
       Err(msg) => failures.push("set \{spec.name}: \{msg}")
     }
   }
-  return Ok({
-    name: test_case.name,
-    response: response,
-    failures: failures,
-    elapsed_ms: @env.now() - started,
-  })
+  return Ok({ name: test_case.name, response, failures, elapsed_ms, })
 }
 
+///|
 /// Execute every case of a suite, in declaration order.
 ///
 /// One variable context is created for the run and shared by all cases, which is
 /// what turns a login case into an authenticated follow-up case.
 pub fn run_suite(
   suite : @parser.Suite,
-  timeout_ms? : Int = DEFAULT_TIMEOUT_MS
+  timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
 ) -> Result[Array[TestResult], String] {
   let context = new_context()
   let results : Array[TestResult] = []

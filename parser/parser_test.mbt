@@ -11,6 +11,7 @@
 // Valid fixtures
 // ---------------------------------------------------------------------------
 
+///|
 /// A GET case covering headers, query parameters and dotted JSON paths.
 const FX_GET_FULL : String =
   #|name: "获取用户列表"
@@ -29,6 +30,7 @@ const FX_GET_FULL : String =
   #|    data.count: 3
   #|
 
+///|
 /// A POST case with a single-quoted JSON body.
 const FX_POST_BODY : String =
   #|name: "create item"
@@ -40,6 +42,7 @@ const FX_POST_BODY : String =
   #|  status: 201
   #|
 
+///|
 /// Two cases in a single suite.
 const FX_MULTI_CASE : String =
   #|name: "case one"
@@ -54,6 +57,7 @@ const FX_MULTI_CASE : String =
   #|  status: 404
   #|
 
+///|
 /// A case that omits `method:` and must therefore default to GET.
 const FX_DEFAULT_METHOD : String =
   #|name: "ping"
@@ -63,6 +67,7 @@ const FX_DEFAULT_METHOD : String =
   #|  status: 204
   #|
 
+///|
 /// Same shape as `FX_GET_FULL`, indented with four spaces per level.
 const FX_FOUR_SPACE_INDENT : String =
   #|name: "four spaces"
@@ -77,10 +82,11 @@ const FX_FOUR_SPACE_INDENT : String =
   #|        ok: true
   #|
 
+///|
 /// Same shape as `FX_DEFAULT_METHOD`, indented with tabs.
-const FX_TAB_INDENT : String =
-  "name: tabbed\nrequest:\n\turl: \"https://a.api.test/tab\"\nexpect:\n\tstatus: 204\n"
+const FX_TAB_INDENT : String = "name: tabbed\nrequest:\n\turl: \"https://a.api.test/tab\"\nexpect:\n\tstatus: 204\n"
 
+///|
 /// A case that extracts a variable with the inline `set:` form.
 const FX_SET_INLINE : String =
   #|name: login
@@ -92,6 +98,7 @@ const FX_SET_INLINE : String =
   #|  set: token = data.access_token
   #|
 
+///|
 /// A case that extracts two variables with the block `set:` form.
 const FX_SET_BLOCK : String =
   #|name: profile
@@ -108,12 +115,15 @@ const FX_SET_BLOCK : String =
 // Invalid fixtures
 // ---------------------------------------------------------------------------
 
+///|
 /// No case at all.
 const FX_EMPTY : String = ""
 
+///|
 /// A case name without any request block.
 const FX_ERR_NO_REQUEST : String = "name: lonely\n"
 
+///|
 /// A request block that never declares `url:`.
 const FX_ERR_NO_URL : String =
   #|name: x
@@ -123,6 +133,7 @@ const FX_ERR_NO_URL : String =
   #|  status: 200
   #|
 
+///|
 /// A request block without an expect block.
 const FX_ERR_NO_EXPECT : String =
   #|name: x
@@ -130,6 +141,7 @@ const FX_ERR_NO_EXPECT : String =
   #|  url: "https://a.api.test"
   #|
 
+///|
 /// A non-numeric status code.
 const FX_ERR_BAD_STATUS : String =
   #|name: x
@@ -139,12 +151,15 @@ const FX_ERR_BAD_STATUS : String =
   #|  status: not-a-number
   #|
 
+///|
 /// A top-level line that is indented.
 const FX_ERR_TOP_LEVEL_INDENT : String = "  name: x\n"
 
+///|
 /// An empty case name.
 const FX_ERR_EMPTY_NAME : String = "name:\n"
 
+///|
 /// An unknown field inside the request block.
 const FX_ERR_UNKNOWN_FIELD : String =
   #|name: x
@@ -155,9 +170,11 @@ const FX_ERR_UNKNOWN_FIELD : String =
   #|  status: 200
   #|
 
+///|
 /// A line that is not a `key: value` pair at all.
 const FX_ERR_NO_COLON : String = "this line has no colon\n"
 
+///|
 /// An inline `set:` without the `name = json.path` assignment.
 const FX_ERR_SET_NO_ASSIGN : String =
   #|name: x
@@ -168,6 +185,7 @@ const FX_ERR_SET_NO_ASSIGN : String =
   #|  set: token
   #|
 
+///|
 /// A block `set:` that declares no children.
 const FX_ERR_SET_EMPTY_BLOCK : String =
   #|name: x
@@ -182,6 +200,7 @@ const FX_ERR_SET_EMPTY_BLOCK : String =
 // Lexer tests
 // ---------------------------------------------------------------------------
 
+///|
 test "lex skips comments and blank lines, preserves indentation" {
   let src = "name: a\n\n  # a comment\nrequest:\n"
   let lines = match lex(src) {
@@ -195,6 +214,7 @@ test "lex skips comments and blank lines, preserves indentation" {
   @test.assert_eq(lines[1].key, "request")
 }
 
+///|
 test "lex keeps unquoted values verbatim" {
   let lines = match lex("  Authorization: Bearer abc\n") {
     Ok(v) => v
@@ -205,6 +225,7 @@ test "lex keeps unquoted values verbatim" {
   @test.assert_eq(lines[0].value.unwrap_or(""), "Bearer abc")
 }
 
+///|
 test "lex strips matching quotes from a value" {
   let lines = match lex("url: \"https://api.example.com\"\n") {
     Ok(v) => v
@@ -213,6 +234,7 @@ test "lex strips matching quotes from a value" {
   @test.assert_eq(lines[0].value.unwrap_or(""), "https://api.example.com")
 }
 
+///|
 test "lex treats a key without a value as a block header" {
   let lines = match lex("expect:\n  status: 200\n") {
     Ok(v) => v
@@ -225,6 +247,7 @@ test "lex treats a key without a value as a block header" {
   }
 }
 
+///|
 test "lex counts a tab as two columns of indentation" {
   let lines = match lex("\turl: x\n") {
     Ok(v) => v
@@ -234,6 +257,7 @@ test "lex counts a tab as two columns of indentation" {
   @test.assert_eq(lines[0].value.unwrap_or(""), "x")
 }
 
+///|
 test "lex rejects a line without a colon" {
   let res = lex(FX_ERR_NO_COLON)
   match res {
@@ -246,6 +270,7 @@ test "lex rejects a line without a colon" {
 // Parser: valid fixtures
 // ---------------------------------------------------------------------------
 
+///|
 test "parse builds a full suite with request and expect blocks" {
   let suite = match parse(FX_GET_FULL) {
     Ok(v) => v
@@ -275,6 +300,7 @@ test "parse builds a full suite with request and expect blocks" {
   }
 }
 
+///|
 test "parse supports multiple cases in one suite" {
   let suite = match parse(FX_MULTI_CASE) {
     Ok(v) => v
@@ -286,6 +312,7 @@ test "parse supports multiple cases in one suite" {
   @test.assert_eq(suite.cases[1].expect.status.unwrap_or(-1), 404)
 }
 
+///|
 test "parse stores the request body when declared" {
   let suite = match parse(FX_POST_BODY) {
     Ok(v) => v
@@ -298,6 +325,7 @@ test "parse stores the request body when declared" {
   )
 }
 
+///|
 test "parse defaults the method to GET when omitted" {
   let suite = match parse(FX_DEFAULT_METHOD) {
     Ok(v) => v
@@ -306,6 +334,7 @@ test "parse defaults the method to GET when omitted" {
   @test.assert_eq(suite.cases[0].request.http_method, "GET")
 }
 
+///|
 test "parse accepts four-space indentation" {
   let suite = match parse(FX_FOUR_SPACE_INDENT) {
     Ok(v) => v
@@ -319,6 +348,7 @@ test "parse accepts four-space indentation" {
   @test.assert_eq(c.expect.checks[0].expected, "true")
 }
 
+///|
 test "parse accepts tab indentation" {
   let suite = match parse(FX_TAB_INDENT) {
     Ok(v) => v
@@ -328,6 +358,7 @@ test "parse accepts tab indentation" {
   @test.assert_eq(suite.cases[0].expect.status.unwrap_or(-1), 204)
 }
 
+///|
 test "parse reads an inline set directive" {
   let suite = match parse(FX_SET_INLINE) {
     Ok(v) => v
@@ -339,6 +370,7 @@ test "parse reads an inline set directive" {
   @test.assert_eq(e.sets[0].path, "data.access_token")
 }
 
+///|
 test "parse reads a block set directive" {
   let suite = match parse(FX_SET_BLOCK) {
     Ok(v) => v
@@ -352,6 +384,7 @@ test "parse reads a block set directive" {
   @test.assert_eq(e.sets[1].path, "data.access_token")
 }
 
+///|
 test "parse leaves sets empty when no set directive is present" {
   let suite = match parse(FX_DEFAULT_METHOD) {
     Ok(v) => v
@@ -364,6 +397,7 @@ test "parse leaves sets empty when no set directive is present" {
 // Parser: invalid fixtures
 // ---------------------------------------------------------------------------
 
+///|
 test "parse rejects an empty suite" {
   match parse(FX_EMPTY) {
     Err(_) => ()
@@ -371,6 +405,7 @@ test "parse rejects an empty suite" {
   }
 }
 
+///|
 test "parse rejects a case without a request block" {
   match parse(FX_ERR_NO_REQUEST) {
     Err(_) => ()
@@ -378,6 +413,7 @@ test "parse rejects a case without a request block" {
   }
 }
 
+///|
 test "parse rejects a request without a url" {
   match parse(FX_ERR_NO_URL) {
     Err(_) => ()
@@ -385,6 +421,7 @@ test "parse rejects a request without a url" {
   }
 }
 
+///|
 test "parse rejects a case without an expect block" {
   match parse(FX_ERR_NO_EXPECT) {
     Err(_) => ()
@@ -392,6 +429,7 @@ test "parse rejects a case without an expect block" {
   }
 }
 
+///|
 test "parse rejects a non-numeric status code" {
   match parse(FX_ERR_BAD_STATUS) {
     Err(_) => ()
@@ -399,6 +437,7 @@ test "parse rejects a non-numeric status code" {
   }
 }
 
+///|
 test "parse rejects indentation at top level" {
   match parse(FX_ERR_TOP_LEVEL_INDENT) {
     Err(_) => ()
@@ -406,6 +445,7 @@ test "parse rejects indentation at top level" {
   }
 }
 
+///|
 test "parse rejects an empty case name" {
   match parse(FX_ERR_EMPTY_NAME) {
     Err(_) => ()
@@ -413,6 +453,7 @@ test "parse rejects an empty case name" {
   }
 }
 
+///|
 test "parse rejects an unknown request field" {
   match parse(FX_ERR_UNKNOWN_FIELD) {
     Err(_) => ()
@@ -420,6 +461,7 @@ test "parse rejects an unknown request field" {
   }
 }
 
+///|
 test "parse rejects an inline set without an assignment" {
   match parse(FX_ERR_SET_NO_ASSIGN) {
     Err(_) => ()
@@ -427,9 +469,572 @@ test "parse rejects an inline set without an assignment" {
   }
 }
 
+///|
 test "parse rejects an empty set block" {
   match parse(FX_ERR_SET_EMPTY_BLOCK) {
     Err(_) => ()
     Ok(_) => fail("should reject an empty set block")
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Extended expectations: contains / length / type / duration_ms / schema
+// ---------------------------------------------------------------------------
+
+///|
+/// A case that uses every new expectation family at once.
+const FX_EXPECT_FULL : String =
+  #|name: "extended expect"
+  #|request:
+  #|  url: "https://a.api.test/full"
+  #|expect:
+  #|  status: 200
+  #|  contains: "ok"
+  #|  contains_ci: "OK"
+  #|  duration_ms < 500
+  #|  json:
+  #|    code: 0
+  #|  length:
+  #|    data.items: 3
+  #|  type:
+  #|    code: Int
+  #|    data.name: string
+  #|  schema:
+  #|    id: int!
+  #|    name: string
+  #|    profile: object
+  #|      email: string!
+  #|      age: int
+  #|    tags: array
+  #|
+
+///|
+/// A body budget written in the key/value form, with a two-character operator.
+const FX_DURATION_COLON : String =
+  #|name: "colon budget"
+  #|request:
+  #|  url: "https://a.api.test/budget"
+  #|expect:
+  #|  status: 200
+  #|  duration_ms: <= 120
+  #|
+
+///|
+/// An inline `length:` applying to the body root.
+const FX_LENGTH_ROOT : String =
+  #|name: "root length"
+  #|request:
+  #|  url: "https://a.api.test/list"
+  #|expect:
+  #|  status: 200
+  #|  length: 4
+  #|
+
+///|
+/// An inline `type:` applying to the body root.
+const FX_TYPE_ROOT : String =
+  #|name: "root type"
+  #|request:
+  #|  url: "https://a.api.test/list"
+  #|expect:
+  #|  status: 200
+  #|  type: array
+  #|
+
+///|
+/// A schema using the OAuth2 profile shape an access token response has.
+const FX_SCHEMA_ONLY : String =
+  #|name: "schema only"
+  #|request:
+  #|  url: "https://a.api.test/oauth/token"
+  #|expect:
+  #|  status: 200
+  #|  schema:
+  #|    access_token: string!
+  #|    token_type: string!
+  #|    expires_in: int!
+  #|    scope: string
+  #|
+
+///|
+/// `contains:` without the text to look for.
+const FX_ERR_CONTAINS_NO_VALUE : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  contains:
+  #|
+
+///|
+/// A `length:` block whose size is not a number.
+const FX_ERR_LENGTH_NOT_INT : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  length:
+  #|    data.items: many
+  #|
+
+///|
+/// A negative `length:`, which no array can satisfy.
+const FX_ERR_LENGTH_NEGATIVE : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  length: -1
+  #|
+
+///|
+/// A `length:` block without any child.
+const FX_ERR_LENGTH_EMPTY_BLOCK : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  length:
+  #|
+
+///|
+/// A `type:` block naming a type that does not exist.
+const FX_ERR_TYPE_UNKNOWN : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  type:
+  #|    code: numberr
+  #|
+
+///|
+/// A `type:` block without any child.
+const FX_ERR_TYPE_EMPTY_BLOCK : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  type:
+  #|
+
+///|
+/// `duration_ms` without an operator or a bound.
+const FX_ERR_DURATION_BARE : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  duration_ms:
+  #|
+
+///|
+/// `duration_ms` with a comparison that is not an operator and a number.
+const FX_ERR_DURATION_BAD_OP : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  duration_ms < fast
+  #|
+
+///|
+/// A negative duration budget, which every request would satisfy.
+const FX_ERR_DURATION_NEGATIVE : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  duration_ms < -1
+  #|
+
+///|
+/// A `schema:` written inline instead of as a block.
+const FX_ERR_SCHEMA_INLINE : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  schema: object
+  #|
+
+///|
+/// A `schema:` block without any field.
+const FX_ERR_SCHEMA_EMPTY : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  schema:
+  #|
+
+///|
+/// A schema field written without a type.
+const FX_ERR_SCHEMA_NO_TYPE : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  schema:
+  #|    id:
+  #|
+
+///|
+/// A schema field naming a type that does not exist.
+const FX_ERR_SCHEMA_BAD_TYPE : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  schema:
+  #|    id: integerr!
+  #|
+
+///|
+/// A scalar schema field that tries to declare nested fields.
+const FX_ERR_SCHEMA_NESTED_SCALAR : String =
+  #|name: x
+  #|request:
+  #|  url: "https://a.api.test"
+  #|expect:
+  #|  status: 200
+  #|  schema:
+  #|    id: int
+  #|      inner: string
+  #|
+
+///|
+test "parse reads contains expectations, case-sensitive and folded" {
+  let suite = match parse(FX_EXPECT_FULL) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  let e = suite.cases[0].expect
+  @test.assert_eq(e.contains.length(), 2)
+  @test.assert_eq(e.contains[0].needle, "ok")
+  @test.assert_eq(e.contains[0].ignore_case, false)
+  @test.assert_eq(e.contains[1].needle, "OK")
+  @test.assert_eq(e.contains[1].ignore_case, true)
+}
+
+///|
+test "parse reads a duration budget written as a bare comparison" {
+  let suite = match parse(FX_EXPECT_FULL) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  let budget = match suite.cases[0].expect.duration {
+    Some(d) => d
+    None => fail("a duration budget should have been parsed")
+  }
+  @test.assert_eq(budget.op, "<")
+  @test.assert_eq(budget.limit_ms, 500)
+}
+
+///|
+test "parse reads a duration budget written as a key/value pair" {
+  let suite = match parse(FX_DURATION_COLON) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  let budget = match suite.cases[0].expect.duration {
+    Some(d) => d
+    None => fail("a duration budget should have been parsed")
+  }
+  @test.assert_eq(budget.op, "<=")
+  @test.assert_eq(budget.limit_ms, 120)
+}
+
+///|
+test "parse reads a length block" {
+  let suite = match parse(FX_EXPECT_FULL) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  let lengths = suite.cases[0].expect.lengths
+  @test.assert_eq(lengths.length(), 1)
+  @test.assert_eq(lengths[0].path, "data.items")
+  @test.assert_eq(lengths[0].size, 3)
+}
+
+///|
+test "parse reads an inline length for the body root" {
+  let suite = match parse(FX_LENGTH_ROOT) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  let lengths = suite.cases[0].expect.lengths
+  @test.assert_eq(lengths.length(), 1)
+  @test.assert_eq(lengths[0].path, "")
+  @test.assert_eq(lengths[0].size, 4)
+}
+
+///|
+test "parse reads a type block and normalises type names" {
+  let suite = match parse(FX_EXPECT_FULL) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  let types = suite.cases[0].expect.types
+  @test.assert_eq(types.length(), 2)
+  @test.assert_eq(types[0].path, "code")
+  @test.assert_eq(types[0].expected.label(), "Int")
+  @test.assert_eq(types[1].path, "data.name")
+  @test.assert_eq(types[1].expected.label(), "String")
+}
+
+///|
+test "parse reads an inline type for the body root" {
+  let suite = match parse(FX_TYPE_ROOT) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  let types = suite.cases[0].expect.types
+  @test.assert_eq(types.length(), 1)
+  @test.assert_eq(types[0].path, "")
+  @test.assert_eq(types[0].expected.label(), "Array")
+}
+
+///|
+test "parse reads a nested schema" {
+  let suite = match parse(FX_EXPECT_FULL) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  let schema = suite.cases[0].expect.schema
+  @test.assert_eq(schema.length(), 4)
+  @test.assert_eq(schema[0].name, "id")
+  @test.assert_eq(schema[0].required, true)
+  @test.assert_eq(schema[0].field_type.label(), "Int")
+  @test.assert_eq(schema[0].children.length(), 0)
+  @test.assert_eq(schema[1].name, "name")
+  @test.assert_eq(schema[1].required, false)
+  @test.assert_eq(schema[2].name, "profile")
+  @test.assert_eq(schema[2].field_type.label(), "Object")
+  @test.assert_eq(schema[2].children.length(), 2)
+  @test.assert_eq(schema[2].children[0].name, "email")
+  @test.assert_eq(schema[2].children[0].required, true)
+  @test.assert_eq(schema[2].children[0].field_type.label(), "String")
+  @test.assert_eq(schema[2].children[1].name, "age")
+  @test.assert_eq(schema[2].children[1].required, false)
+  @test.assert_eq(schema[3].name, "tags")
+  @test.assert_eq(schema[3].field_type.label(), "Array")
+}
+
+///|
+test "parse reads a flat schema of required fields" {
+  let suite = match parse(FX_SCHEMA_ONLY) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  let schema = suite.cases[0].expect.schema
+  @test.assert_eq(schema.length(), 4)
+  @test.assert_eq(schema[0].name, "access_token")
+  @test.assert_eq(schema[0].required, true)
+  @test.assert_eq(schema[0].field_type.label(), "String")
+  @test.assert_eq(schema[2].required, true)
+  @test.assert_eq(schema[2].field_type.label(), "Int")
+  @test.assert_eq(schema[3].required, false)
+}
+
+///|
+test "parse leaves the extended expectations empty when unused" {
+  let suite = match parse(FX_DEFAULT_METHOD) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  let e = suite.cases[0].expect
+  @test.assert_eq(e.contains.length(), 0)
+  @test.assert_eq(e.lengths.length(), 0)
+  @test.assert_eq(e.types.length(), 0)
+  @test.assert_eq(e.schema.length(), 0)
+  match e.duration {
+    None => ()
+    Some(_) => fail("no duration budget should have been parsed")
+  }
+}
+
+///|
+test "parse rejects contains without a value" {
+  match parse(FX_ERR_CONTAINS_NO_VALUE) {
+    Err(_) => ()
+    Ok(_) => fail("should reject contains without a value")
+  }
+}
+
+///|
+test "parse rejects a non-numeric length" {
+  match parse(FX_ERR_LENGTH_NOT_INT) {
+    Err(_) => ()
+    Ok(_) => fail("should reject a non-numeric length")
+  }
+}
+
+///|
+test "parse rejects a negative length" {
+  match parse(FX_ERR_LENGTH_NEGATIVE) {
+    Err(_) => ()
+    Ok(_) => fail("should reject a negative length")
+  }
+}
+
+///|
+test "parse rejects an empty length block" {
+  match parse(FX_ERR_LENGTH_EMPTY_BLOCK) {
+    Err(_) => ()
+    Ok(_) => fail("should reject an empty length block")
+  }
+}
+
+///|
+test "parse rejects an unknown type name" {
+  match parse(FX_ERR_TYPE_UNKNOWN) {
+    Err(_) => ()
+    Ok(_) => fail("should reject an unknown type name")
+  }
+}
+
+///|
+test "parse rejects an empty type block" {
+  match parse(FX_ERR_TYPE_EMPTY_BLOCK) {
+    Err(_) => ()
+    Ok(_) => fail("should reject an empty type block")
+  }
+}
+
+///|
+test "parse rejects duration_ms without a budget" {
+  match parse(FX_ERR_DURATION_BARE) {
+    Err(_) => ()
+    Ok(_) => fail("should reject a bare duration_ms")
+  }
+}
+
+///|
+test "parse rejects a duration comparison without a number" {
+  match parse(FX_ERR_DURATION_BAD_OP) {
+    Err(_) => ()
+    Ok(_) => fail("should reject a duration comparison without a number")
+  }
+}
+
+///|
+test "parse rejects a negative duration budget" {
+  match parse(FX_ERR_DURATION_NEGATIVE) {
+    Err(_) => ()
+    Ok(_) => fail("should reject a negative duration budget")
+  }
+}
+
+///|
+test "parse rejects an inline schema" {
+  match parse(FX_ERR_SCHEMA_INLINE) {
+    Err(_) => ()
+    Ok(_) => fail("should reject an inline schema")
+  }
+}
+
+///|
+test "parse rejects an empty schema block" {
+  match parse(FX_ERR_SCHEMA_EMPTY) {
+    Err(_) => ()
+    Ok(_) => fail("should reject an empty schema block")
+  }
+}
+
+///|
+test "parse rejects a schema field without a type" {
+  match parse(FX_ERR_SCHEMA_NO_TYPE) {
+    Err(_) => ()
+    Ok(_) => fail("should reject a schema field without a type")
+  }
+}
+
+///|
+test "parse rejects an unknown schema type" {
+  match parse(FX_ERR_SCHEMA_BAD_TYPE) {
+    Err(_) => ()
+    Ok(_) => fail("should reject an unknown schema type")
+  }
+}
+
+///|
+test "parse rejects nested fields under a scalar schema field" {
+  match parse(FX_ERR_SCHEMA_NESTED_SCALAR) {
+    Err(_) => ()
+    Ok(_) => fail("should reject nesting under a scalar field")
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Lexer: escapes and bare comparisons
+// ---------------------------------------------------------------------------
+
+///|
+test "lex decodes the escape sequences of a quoted value" {
+  let lines = match lex("body: \"a\\nb\\t\\\"c\\\\d\"\n") {
+    Ok(v) => v
+    Err(msg) => fail("lex should succeed: \{msg}")
+  }
+  @test.assert_eq(lines[0].key, "body")
+  @test.assert_eq(lines[0].value.unwrap_or(""), "a\nb\t\"c\\d")
+}
+
+///|
+test "lex keeps an unknown escape sequence verbatim" {
+  let lines = match lex("x: \"a\\qb\"\n") {
+    Ok(v) => v
+    Err(msg) => fail("lex should succeed: \{msg}")
+  }
+  @test.assert_eq(lines[0].value.unwrap_or(""), "a\\qb")
+}
+
+///|
+test "lex leaves an unquoted backslash alone" {
+  let lines = match lex("path: C:\\temp\\new\n") {
+    Ok(v) => v
+    Err(msg) => fail("lex should succeed: \{msg}")
+  }
+  @test.assert_eq(lines[0].value.unwrap_or(""), "C:\\temp\\new")
+}
+
+///|
+test "lex recognises a bare comparison expression" {
+  let lines = match lex("  duration_ms < 500\n") {
+    Ok(v) => v
+    Err(msg) => fail("lex should succeed: \{msg}")
+  }
+  @test.assert_eq(lines[0].key, "duration_ms")
+  @test.assert_eq(lines[0].indent, 2)
+  @test.assert_eq(lines[0].value.unwrap_or(""), "< 500")
+}
+
+///|
+test "lex recognises a two-character comparison operator" {
+  let lines = match lex("duration_ms >= 10\n") {
+    Ok(v) => v
+    Err(msg) => fail("lex should succeed: \{msg}")
+  }
+  @test.assert_eq(lines[0].value.unwrap_or(""), ">= 10")
+}
+
+///|
+test "lex still rejects a bare assignment" {
+  match lex("total = 5\n") {
+    Err(_) => ()
+    Ok(_) => fail("a bare assignment is not a comparison expression")
   }
 }
