@@ -12,12 +12,43 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install the MoonBit toolchain
         run: |
-          curl -fsSL https://cli.moonbitlang.cn/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+          set -euo pipefail
+
+          moon_home="${MOON_HOME:-$HOME/.moon}"
+
+          # `curl ... | bash` reports the exit status of `bash`, never of `curl`:
+          # a download that times out feeds the installer an empty script, which
+          # exits 0, and the failure only surfaces one step later as
+          # "moon: command not found". `pipefail` plus the check below put the
+          # failure back where it happens. The download is retried as a whole
+          # because a hosted runner does not always reach the CDN on the first
+          # try, and both official mirrors are tried before giving up.
+          installed=0
+          for attempt in 1 2 3; do
+            for host in cli.moonbitlang.com cli.moonbitlang.cn; do
+              echo "moonbit install: attempt $attempt via $host"
+              if curl -fsSL --retry 3 --retry-all-errors --retry-delay 5 \
+                     --connect-timeout 30 "https://$host/install/unix.sh" | bash \
+                 && [ -x "$moon_home/bin/moon" ]; then
+                installed=1
+                break
+              fi
+            done
+            if [ "$installed" -eq 1 ]; then
+              break
+            fi
+            sleep 15
+          done
+          if [ "$installed" -ne 1 ]; then
+            echo "::error::the MoonBit toolchain could not be installed"
+            exit 1
+          fi
+
+          echo "$moon_home/bin" >> "$GITHUB_PATH"
 
       - name: Show the toolchain version
         run: moon version --all
