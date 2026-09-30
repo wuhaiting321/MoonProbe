@@ -1497,3 +1497,301 @@ test "parse accepts a trailing comment on every line of a suite" {
   @test.assert_eq(first.expect.sets[0].name, "token")
   @test.assert_eq(first.expect.sets[0].path, "data.access_token")
 }
+
+// ---------------------------------------------------------------------------
+// Retry budgets
+// ---------------------------------------------------------------------------
+
+///|
+/// The smallest suite that declares a retry budget on its only case.
+fn retry_fixture(declaration : String) -> String {
+  return "name: \"retry\"\nrequest:\n  url: \"https://a.api.test/ping\"\n" +
+    declaration +
+    "expect:\n  status: 200\n"
+}
+
+///|
+test "parse reads a retry budget declared by a case" {
+  let suite = match parse(retry_fixture("  retry: 2\n")) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  @test.assert_eq(suite.cases[0].request.retry_count, Some(2))
+}
+
+///|
+test "parse leaves the case retry budget unset when it is not declared" {
+  let suite = match parse(retry_fixture("")) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  @test.assert_eq(suite.cases[0].request.retry_count, None)
+}
+
+///|
+test "parse reads a retry budget declared by the config block" {
+  let source =
+    #|config:
+    #|  base_url: "https://a.api.test"
+    #|  retry: 3
+    #|name: "retry"
+    #|request:
+    #|  url: "/ping"
+    #|expect:
+    #|  status: 200
+    #|
+  let suite = match parse(source) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  @test.assert_eq(suite.config.retry_count, Some(3))
+}
+
+///|
+test "parse accepts the largest retry budget" {
+  let suite = match parse(retry_fixture("  retry: 10\n")) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  @test.assert_eq(suite.cases[0].request.retry_count, Some(10))
+}
+
+///|
+test "parse rejects a retry budget above the cap" {
+  match parse(retry_fixture("  retry: 11\n")) {
+    Err(msg) => @test.assert_eq(msg.contains("retry must not exceed 10"), true)
+    Ok(_) => fail("should reject a retry budget above the cap")
+  }
+}
+
+///|
+test "parse rejects a negative retry budget" {
+  match parse(retry_fixture("  retry: -1\n")) {
+    Err(msg) =>
+      @test.assert_eq(msg.contains("retry must not be negative"), true)
+    Ok(_) => fail("should reject a negative retry budget")
+  }
+}
+
+///|
+test "parse rejects a non-numeric retry budget" {
+  match parse(retry_fixture("  retry: soon\n")) {
+    Err(msg) => @test.assert_eq(msg.contains("invalid retry"), true)
+    Ok(_) => fail("should reject a non-numeric retry budget")
+  }
+}
+
+///|
+test "parse rejects a retry without a value" {
+  match parse(retry_fixture("  retry:\n")) {
+    Err(msg) => @test.assert_eq(msg.contains("retry requires a value"), true)
+    Ok(_) => fail("should reject a retry without a value")
+  }
+}
+
+// ---------------------------------------------------------------------------
+// before_each / after_each
+// ---------------------------------------------------------------------------
+
+///|
+/// The suite-level hooks a file declares around one plain case.
+const FX_SUITE_HOOKS : String =
+  #|before_each:
+  #|  name: "sign in"
+  #|  request:
+  #|    method: POST
+  #|    url: "/login"
+  #|  expect:
+  #|    status: 200
+  #|    set: token = header.X-Token
+  #|after_each:
+  #|  name: "sign out"
+  #|  request:
+  #|    method: POST
+  #|    url: "/logout"
+  #|  expect:
+  #|    status: 204
+  #|name: "who am i"
+  #|request:
+  #|  url: "/me"
+  #|expect:
+  #|  status: 200
+  #|
+
+///|
+test "parse reads suite-level before_each and after_each blocks" {
+  let suite = match parse(FX_SUITE_HOOKS) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  @test.assert_eq(suite.cases.length(), 1)
+  @test.assert_eq(suite.before_each.length(), 1)
+  @test.assert_eq(suite.after_each.length(), 1)
+  let setup = suite.before_each[0]
+  @test.assert_eq(setup.name, "sign in")
+  @test.assert_eq(setup.request.http_method, "POST")
+  @test.assert_eq(setup.request.url, "/login")
+  // A hook is a case, so it can bind what the cases after it need.
+  @test.assert_eq(setup.expect.sets[0].name, "token")
+  @test.assert_eq(suite.after_each[0].name, "sign out")
+  @test.assert_eq(suite.after_each[0].expect.status, Some(204))
+}
+
+///|
+test "parse leaves the suite hooks empty when the file declares none" {
+  let suite = match parse(FX_DEFAULT_METHOD) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  @test.assert_eq(suite.before_each.length(), 0)
+  @test.assert_eq(suite.after_each.length(), 0)
+}
+
+///|
+test "parse reads two steps inside one case-level hook" {
+  let source =
+    #|name: "hooked"
+    #|before_each:
+    #|  name: "first step"
+    #|  request:
+    #|    url: "/setup-1"
+    #|  expect:
+    #|    status: 200
+    #|  name: "second step"
+    #|  request:
+    #|    url: "/setup-2"
+    #|  expect:
+    #|    status: 200
+    #|request:
+    #|  url: "/work"
+    #|expect:
+    #|  status: 200
+    #|
+  let suite = match parse(source) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  @test.assert_eq(suite.cases.length(), 1)
+  @test.assert_eq(suite.cases[0].before_each.length(), 2)
+  @test.assert_eq(suite.cases[0].before_each[0].name, "first step")
+  @test.assert_eq(suite.cases[0].before_each[1].name, "second step")
+  @test.assert_eq(suite.cases[0].request.url, "/work")
+}
+
+///|
+test "parse rejects a hook block with no steps" {
+  let source =
+    #|before_each:
+    #|name: "lonely"
+    #|request:
+    #|  url: "/work"
+    #|expect:
+    #|  status: 200
+    #|
+  match parse(source) {
+    Err(msg) => @test.assert_eq(msg.contains("is empty"), true)
+    Ok(_) => fail("should reject an empty hook block")
+  }
+}
+
+///|
+test "parse rejects a hook step that is not a case" {
+  let source =
+    #|before_each:
+    #|  url: "/setup"
+    #|name: "hooked"
+    #|request:
+    #|  url: "/work"
+    #|expect:
+    #|  status: 200
+    #|
+  match parse(source) {
+    Err(msg) => @test.assert_eq(msg.contains("must start with \"name:\""), true)
+    Ok(_) => fail("should reject a hook step without a name")
+  }
+}
+
+///|
+test "a hook block written at the case indentation belongs to that case" {
+  // Indentation is the only signal the grammar has, so a `before_each:` at the
+  // depth of the case above it is that case's own setup step — the same rule
+  // that makes a `request:` at that depth part of the case.
+  let source =
+    #|name: "the case"
+    #|request:
+    #|  url: "/work"
+    #|expect:
+    #|  status: 200
+    #|before_each:
+    #|  name: "case setup"
+    #|  request:
+    #|    url: "/setup"
+    #|  expect:
+    #|    status: 200
+    #|
+  let suite = match parse(source) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  @test.assert_eq(suite.cases.length(), 1)
+  @test.assert_eq(suite.before_each.length(), 0)
+  @test.assert_eq(suite.cases[0].before_each.length(), 1)
+  @test.assert_eq(suite.cases[0].before_each[0].name, "case setup")
+}
+
+///|
+test "parse rejects a duplicate hook block" {
+  let source =
+    #|before_each:
+    #|  name: "once"
+    #|  request:
+    #|    url: "/setup-1"
+    #|  expect:
+    #|    status: 200
+    #|before_each:
+    #|  name: "twice"
+    #|  request:
+    #|    url: "/setup-2"
+    #|  expect:
+    #|    status: 200
+    #|name: "hooked"
+    #|request:
+    #|  url: "/work"
+    #|expect:
+    #|  status: 200
+    #|
+  match parse(source) {
+    Err(msg) =>
+      @test.assert_eq(msg.contains("duplicate before_each block"), true)
+    Ok(_) => fail("should reject a duplicate hook block")
+  }
+}
+
+///|
+test "parse rejects a hook step that declares its own hook" {
+  // The nested hook would never run, so the file is rejected rather than
+  // silently losing a step the author clearly meant to be executed.
+  let source =
+    #|before_each:
+    #|  name: "outer"
+    #|  before_each:
+    #|    name: "inner"
+    #|    request:
+    #|      url: "/inner"
+    #|    expect:
+    #|      status: 200
+    #|  request:
+    #|    url: "/outer"
+    #|  expect:
+    #|    status: 200
+    #|name: "hooked"
+    #|request:
+    #|  url: "/work"
+    #|expect:
+    #|  status: 200
+    #|
+  match parse(source) {
+    Err(msg) => @test.assert_eq(msg.contains("cannot declare its own"), true)
+    Ok(_) => fail("should reject a hook step that declares a hook")
+  }
+}

@@ -52,6 +52,7 @@ fn append_all(target : Array[String], source : Array[String]) -> Unit {
 /// The step's `set:` extractions do reach the shared context, which is the whole
 /// point of a setup step.
 fn run_hook_step(
+  transport : Transport,
   step : @parser.Case,
   config : @parser.Config,
   context : Map[String, String],
@@ -59,7 +60,8 @@ fn run_hook_step(
   role : String,
 ) -> Array[String] {
   let label = "\{role} \"\{step.name}\""
-  let response = match run_request(step.request, config, context, timeout_ms~) {
+  let response = match
+    run_request_with(transport, step.request, config, context, timeout_ms~) {
     Ok(r) => r
     Err(msg) => return ["\{label}: \{msg}"]
   }
@@ -105,7 +107,7 @@ pub fn run_test(
   context : Map[String, String],
   timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
 ) -> Result[TestResult, String] {
-  return run_case(test_case, config, context, [], [], timeout_ms)
+  return run_case(send, test_case, config, context, [], [], timeout_ms)
 }
 
 ///|
@@ -123,6 +125,7 @@ pub fn run_test(
 /// bury the one real cause. Cleanup still runs, on every path, because a step that
 /// tears a fixture down matters most exactly when the case went wrong.
 fn run_case(
+  transport : Transport,
   test_case : @parser.Case,
   config : @parser.Config,
   context : Map[String, String],
@@ -134,7 +137,7 @@ fn run_case(
   let mut blocked = false
   for step in suite_before {
     let step_failures = run_hook_step(
-      step, config, context, timeout_ms, "before_each",
+      transport, step, config, context, timeout_ms, "before_each",
     )
     append_all(failures, step_failures)
     if step_failures.length() > 0 {
@@ -144,7 +147,7 @@ fn run_case(
   if !blocked {
     for step in test_case.before_each {
       let step_failures = run_hook_step(
-        step, config, context, timeout_ms, "before_each",
+        transport, step, config, context, timeout_ms, "before_each",
       )
       append_all(failures, step_failures)
       if step_failures.length() > 0 {
@@ -158,7 +161,13 @@ fn run_case(
   let mut response : Response? = None
   if !blocked {
     let sent = match
-      run_request(test_case.request, config, context, timeout_ms~) {
+      run_request_with(
+        transport,
+        test_case.request,
+        config,
+        context,
+        timeout_ms~,
+      ) {
       Ok(r) => r
       Err(msg) => return Err(msg)
     }
@@ -185,13 +194,13 @@ fn run_case(
   for step in test_case.after_each {
     append_all(
       failures,
-      run_hook_step(step, config, context, timeout_ms, "after_each"),
+      run_hook_step(transport, step, config, context, timeout_ms, "after_each"),
     )
   }
   for step in suite_after {
     append_all(
       failures,
-      run_hook_step(step, config, context, timeout_ms, "after_each"),
+      run_hook_step(transport, step, config, context, timeout_ms, "after_each"),
     )
   }
   let elapsed_ms = match response {
@@ -212,11 +221,29 @@ pub fn run_suite(
   suite : @parser.Suite,
   timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
 ) -> Result[Array[TestResult], String] {
+  return run_suite_with(send, suite, timeout_ms~)
+}
+
+///|
+/// Execute every case of a suite through a caller-supplied transport.
+///
+/// This is the whole pipeline bound to one function: the parsed suite comes in,
+/// each case is resolved against the suite config, its placeholders are expanded,
+/// the request is sent and retried as needed, the assertions run over the reply
+/// and one result per case comes out. A test supplies a scripted transport and
+/// therefore exercises the entire path — parsing, config merge, variable
+/// injection, transport, assertion — without a network.
+pub fn run_suite_with(
+  transport : Transport,
+  suite : @parser.Suite,
+  timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
+) -> Result[Array[TestResult], String] {
   let context = new_context()
   let results : Array[TestResult] = []
   for test_case in suite.cases {
     match
       run_case(
+        transport,
         test_case,
         suite.config,
         context,
