@@ -7,15 +7,19 @@
 /// also tagged `[PASS]` / `[FAIL]` so that the report stays readable both in a
 /// terminal that understands escape sequences and in a log file that does not.
 
+///|
 /// ANSI escape sequence that clears the highlighting.
 const ANSI_RESET : String = "\u{1b}[0m"
 
+///|
 /// ANSI escape sequence for the "passed" highlight.
 const ANSI_GREEN : String = "\u{1b}[32m"
 
+///|
 /// ANSI escape sequence for the "failed" highlight.
 const ANSI_RED : String = "\u{1b}[31m"
 
+///|
 /// The summary line printed after the per-case section.
 ///
 /// It reports the three counts a CI log is scanned for, plus the wall-clock
@@ -24,6 +28,7 @@ fn summary_line(total : Int, passed : Int, elapsed_ms : UInt64) -> String {
   return "Summary: \{total} total, \{passed} passed, \{total - passed} failed in \{elapsed_ms} ms"
 }
 
+///|
 /// Whether every case of the run passed.
 pub fn all_passed(results : Array[@runner.TestResult]) -> Bool {
   for result in results {
@@ -34,6 +39,7 @@ pub fn all_passed(results : Array[@runner.TestResult]) -> Bool {
   return true
 }
 
+///|
 /// Print the console report of a finished run.
 ///
 /// `elapsed_ms` is the wall-clock duration of the whole run, measured by the
@@ -44,7 +50,7 @@ pub fn all_passed(results : Array[@runner.TestResult]) -> Bool {
 /// actually returned.
 pub fn print_report(
   results : Array[@runner.TestResult],
-  elapsed_ms : UInt64
+  elapsed_ms : UInt64,
 ) -> Unit {
   let mut passed = 0
   for result in results {
@@ -67,6 +73,7 @@ pub fn print_report(
   }
 }
 
+///|
 /// Format a millisecond count as the seconds value JUnit expects, e.g. `1.234`.
 fn seconds(ms : UInt64) -> String {
   let whole : String = "\{ms / 1000}"
@@ -74,6 +81,7 @@ fn seconds(ms : UInt64) -> String {
   return whole + "." + frac.pad_start(3, '0')
 }
 
+///|
 /// Escape the five XML metacharacters so that a case name or a failure message
 /// can be embedded in the report without breaking it.
 fn xml_escape(text : String) -> String {
@@ -96,6 +104,7 @@ fn xml_escape(text : String) -> String {
   return buf.to_string()
 }
 
+///|
 /// Render a finished run as a JUnit XML document.
 ///
 /// The document follows the layout Jenkins and GitHub Actions understand: one
@@ -104,7 +113,7 @@ fn xml_escape(text : String) -> String {
 /// where to write it.
 pub fn to_junit_xml(
   results : Array[@runner.TestResult],
-  elapsed_ms : UInt64
+  elapsed_ms : UInt64,
 ) -> String {
   let total : String = "\{results.length()}"
   let mut failed = 0
@@ -139,7 +148,11 @@ pub fn to_junit_xml(
       for failure in result.failures {
         let message = xml_escape(failure)
         buf.write_string(
-          "      <failure message=\"" + message + "\">" + message + "</failure>\n",
+          "      <failure message=\"" +
+          message +
+          "\">" +
+          message +
+          "</failure>\n",
         )
       }
       buf.write_string("    </testcase>\n")

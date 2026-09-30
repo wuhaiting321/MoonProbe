@@ -1,8 +1,8 @@
+///|
 /// MoonProbe - reporter tests
 ///
 /// The console report is exercised end to end through the CLI; what is checked
 /// here is the JUnit XML document, whose shape a CI server depends on.
-
 test "to_junit_xml renders the document skeleton of a run without results" {
   let source =
     #|name: "skeleton"
@@ -34,6 +34,7 @@ test "to_junit_xml renders the document skeleton of a run without results" {
   @test.assert_eq(xml.contains("</testsuites>"), true)
 }
 
+///|
 #cfg(target="js")
 test "to_junit_xml embeds a real case and its assertion failure" {
   let source =

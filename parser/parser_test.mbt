@@ -1038,3 +1038,352 @@ test "lex still rejects a bare assignment" {
     Ok(_) => fail("a bare assignment is not a comparison expression")
   }
 }
+
+// ---------------------------------------------------------------------------
+// Suite-level config block
+// ---------------------------------------------------------------------------
+
+///|
+/// A file that opens with a full `config:` preamble.
+const FX_CONFIG_FULL : String =
+  #|config:
+  #|  base_url: "https://api.example.com/v1"
+  #|  global_timeout: 8000
+  #|  global_headers:
+  #|    Authorization: "Bearer ${API_TOKEN}"
+  #|    Accept: "application/json"
+  #|name: "configured"
+  #|request:
+  #|  url: "/users"
+  #|expect:
+  #|  status: 200
+  #|
+
+///|
+/// A config block that only declares a base URL.
+const FX_CONFIG_BASE_ONLY : String =
+  #|config:
+  #|  base_url: "https://api.example.com"
+  #|name: "base only"
+  #|request:
+  #|  url: "/users"
+  #|expect:
+  #|  status: 200
+  #|
+
+///|
+test "parse reads a full config block" {
+  let suite = match parse(FX_CONFIG_FULL) {
+    Ok(v) => v
+    Err(msg) => fail("config fixture should parse: \{msg}")
+  }
+  @test.assert_eq(
+    suite.config.base_url.unwrap_or(""),
+    "https://api.example.com/v1",
+  )
+  @test.assert_eq(suite.config.global_timeout_ms.unwrap_or(-1), 8000)
+  @test.assert_eq(suite.config.is_empty(), false)
+  @test.assert_eq(suite.cases.length(), 1)
+}
+
+///|
+test "parse keeps the global headers in declaration order" {
+  let suite = match parse(FX_CONFIG_FULL) {
+    Ok(v) => v
+    Err(msg) => fail("config fixture should parse: \{msg}")
+  }
+  @test.assert_eq(suite.config.global_headers.length(), 2)
+  @test.assert_eq(suite.config.global_headers[0].key, "Authorization")
+  // A config value is stored verbatim: only the runner expands placeholders.
+  @test.assert_eq(suite.config.global_headers[0].value, "Bearer ${API_TOKEN}")
+  @test.assert_eq(suite.config.global_headers[1].key, "Accept")
+  @test.assert_eq(suite.config.global_headers[1].value, "application/json")
+}
+
+///|
+test "parse defaults to the empty config when no block is declared" {
+  let suite = match parse(FX_GET_FULL) {
+    Ok(v) => v
+    Err(msg) => fail("fixture should parse: \{msg}")
+  }
+  @test.assert_eq(suite.config.is_empty(), true)
+  @test.assert_eq(suite.config.base_url.unwrap_or(""), "")
+  @test.assert_eq(suite.config.global_headers.length(), 0)
+}
+
+///|
+test "parse leaves the global timeout unset when only base_url is declared" {
+  let suite = match parse(FX_CONFIG_BASE_ONLY) {
+    Ok(v) => v
+    Err(msg) => fail("config fixture should parse: \{msg}")
+  }
+  @test.assert_eq(suite.config.global_timeout_ms.unwrap_or(-1), -1)
+  @test.assert_eq(suite.config.is_empty(), false)
+}
+
+///|
+test "parse reads a case-level timeout" {
+  let src =
+    #|name: "slow"
+    #|request:
+    #|  url: "https://api.example.com/slow"
+    #|  timeout: 250
+    #|expect:
+    #|  status: 200
+    #|
+  let suite = match parse(src) {
+    Ok(v) => v
+    Err(msg) => fail("fixture should parse: \{msg}")
+  }
+  @test.assert_eq(suite.cases[0].request.timeout_ms.unwrap_or(-1), 250)
+}
+
+///|
+test "parse leaves the case timeout unset when it is omitted" {
+  let suite = match parse(FX_CONFIG_BASE_ONLY) {
+    Ok(v) => v
+    Err(msg) => fail("fixture should parse: \{msg}")
+  }
+  @test.assert_eq(suite.cases[0].request.timeout_ms.unwrap_or(-1), -1)
+}
+
+///|
+test "parse rejects a config block declared after the first case" {
+  let src =
+    #|name: "first"
+    #|request:
+    #|  url: "https://api.example.com/users"
+    #|expect:
+    #|  status: 200
+    #|config:
+    #|  base_url: "https://api.example.com"
+    #|
+  match parse(src) {
+    Err(msg) =>
+      @test.assert_eq(msg.contains("must appear before the first case"), true)
+    Ok(_) => fail("a trailing config block must be rejected")
+  }
+}
+
+///|
+test "parse rejects a duplicate config block" {
+  let src =
+    #|config:
+    #|  base_url: "https://api.example.com"
+    #|config:
+    #|  base_url: "https://other.example.com"
+    #|name: "dup"
+    #|request:
+    #|  url: "/users"
+    #|expect:
+    #|  status: 200
+    #|
+  match parse(src) {
+    Err(msg) => @test.assert_eq(msg.contains("duplicate config block"), true)
+    Ok(_) => fail("a second config block must be rejected")
+  }
+}
+
+///|
+test "parse rejects an empty config block" {
+  match parse("config:\nname: \"x\"\n") {
+    Err(msg) => @test.assert_eq(msg.contains("config block is empty"), true)
+    Ok(_) => fail("an empty config block must be rejected")
+  }
+}
+
+///|
+test "parse rejects an unknown config key" {
+  let src =
+    #|config:
+    #|  base_path: "https://api.example.com"
+    #|
+  match parse(src) {
+    Err(msg) => @test.assert_eq(msg.contains("unknown config key"), true)
+    Ok(_) => fail("an unknown config key must be rejected")
+  }
+}
+
+///|
+test "parse rejects a relative base_url" {
+  let src =
+    #|config:
+    #|  base_url: "/v1"
+    #|name: "relative base"
+    #|request:
+    #|  url: "/users"
+    #|expect:
+    #|  status: 200
+    #|
+  match parse(src) {
+    Err(msg) =>
+      @test.assert_eq(msg.contains("must be an absolute http(s) url"), true)
+    Ok(_) => fail("a relative base_url must be rejected")
+  }
+}
+
+///|
+test "parse rejects a non-absolute config url that only looks like one" {
+  let src =
+    #|config:
+    #|  base_url: "ftp://files.example.com"
+    #|name: "ftp base"
+    #|request:
+    #|  url: "/users"
+    #|expect:
+    #|  status: 200
+    #|
+  match parse(src) {
+    Err(msg) =>
+      @test.assert_eq(msg.contains("must be an absolute http(s) url"), true)
+    Ok(_) => fail("only http(s) is a usable base_url")
+  }
+}
+
+///|
+test "parse rejects a negative global timeout" {
+  let src =
+    #|config:
+    #|  base_url: "https://api.example.com"
+    #|  global_timeout: -1
+    #|name: "negative"
+    #|request:
+    #|  url: "/users"
+    #|expect:
+    #|  status: 200
+    #|
+  match parse(src) {
+    Err(msg) =>
+      @test.assert_eq(msg.contains("global_timeout must not be negative"), true)
+    Ok(_) => fail("a negative timeout must be rejected")
+  }
+}
+
+///|
+test "parse rejects a non-numeric global timeout" {
+  let src =
+    #|config:
+    #|  base_url: "https://api.example.com"
+    #|  global_timeout: soon
+    #|name: "typo"
+    #|request:
+    #|  url: "/users"
+    #|expect:
+    #|  status: 200
+    #|
+  match parse(src) {
+    Err(msg) => @test.assert_eq(msg.contains("invalid global_timeout"), true)
+    Ok(_) => fail("a non-numeric timeout must be rejected")
+  }
+}
+
+///|
+test "parse rejects a negative case timeout" {
+  let src =
+    #|name: "negative"
+    #|request:
+    #|  url: "https://api.example.com/users"
+    #|  timeout: -5
+    #|expect:
+    #|  status: 200
+    #|
+  match parse(src) {
+    Err(msg) =>
+      @test.assert_eq(msg.contains("timeout must not be negative"), true)
+    Ok(_) => fail("a negative case timeout must be rejected")
+  }
+}
+
+// ---------------------------------------------------------------------------
+// `set:` sources: body, response header and cookie
+// ---------------------------------------------------------------------------
+
+///|
+/// One case extracting from all three sources.
+const FX_SET_SOURCES : String =
+  #|name: "extract everything"
+  #|request:
+  #|  url: "https://api.example.com/login"
+  #|expect:
+  #|  status: 200
+  #|  set: raw = data.token
+  #|  set: token = header.X-Token
+  #|  set: sid = cookie.session
+  #|  set: uid = json.data.id
+  #|
+
+///|
+test "parse reads set directives from the body, header and cookie" {
+  let suite = match parse(FX_SET_SOURCES) {
+    Ok(v) => v
+    Err(msg) => fail("set fixture should parse: \{msg}")
+  }
+  let sets = suite.cases[0].expect.sets
+  @test.assert_eq(sets.length(), 4)
+  @test.assert_eq(sets[0].name, "raw")
+  @test.assert_eq(sets[0].path, "data.token")
+  match sets[0].source {
+    FromBody => ()
+    _ => fail("a path without a prefix reads the body")
+  }
+  @test.assert_eq(sets[1].name, "token")
+  @test.assert_eq(sets[1].path, "X-Token")
+  match sets[1].source {
+    FromHeader => ()
+    _ => fail("`header.` should select the response header")
+  }
+  @test.assert_eq(sets[2].path, "session")
+  match sets[2].source {
+    FromCookie => ()
+    _ => fail("`cookie.` should select the cookie")
+  }
+  @test.assert_eq(sets[3].path, "data.id")
+}
+
+///|
+test "parse folds the case of a set source prefix" {
+  let src =
+    #|name: "case folded"
+    #|request:
+    #|  url: "https://api.example.com/login"
+    #|expect:
+    #|  status: 200
+    #|  set: token = HEADER.X-Token
+    #|  set: sid = Cookies.session
+    #|  set: uid = Body.data.id
+    #|
+  let suite = match parse(src) {
+    Ok(v) => v
+    Err(msg) => fail("set fixture should parse: \{msg}")
+  }
+  let sets = suite.cases[0].expect.sets
+  match sets[0].source {
+    FromHeader => ()
+    _ => fail("`HEADER.` should still select the header")
+  }
+  match sets[1].source {
+    FromCookie => ()
+    _ => fail("`Cookies.` should still select the cookie")
+  }
+  match sets[2].source {
+    FromBody => ()
+    _ => fail("`Body.` should still select the body")
+  }
+}
+
+///|
+test "parse rejects a set prefix without a name after the dot" {
+  let src =
+    #|name: "empty target"
+    #|request:
+    #|  url: "https://api.example.com/login"
+    #|expect:
+    #|  status: 200
+    #|  set: token = header.
+    #|
+  match parse(src) {
+    Err(msg) =>
+      @test.assert_eq(msg.contains("needs a name after the dot"), true)
+    Ok(_) => fail("`header.` alone names nothing to read")
+  }
+}

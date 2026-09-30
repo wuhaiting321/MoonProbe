@@ -31,6 +31,10 @@ pub fn TestResult::passed(self : TestResult) -> Bool {
 /// Execute one `.probe` case end to end: request, then assertions, then the
 /// `set:` extractions.
 ///
+/// `config` is the suite's `config:` block, merged into the request before it is
+/// sent: the base URL, the global headers and the global timeout all take effect
+/// here, which is why this is a parameter rather than something the case carries.
+///
 /// `context` is read to expand `{{name}}` references in the request and written
 /// to with every variable the case extracts, so that the caller can pass the
 /// same map to the next case.
@@ -41,11 +45,13 @@ pub fn TestResult::passed(self : TestResult) -> Bool {
 /// extraction is reported as one more failure instead of aborting the run.
 pub fn run_test(
   test_case : @parser.Case,
+  config : @parser.Config,
   context : Map[String, String],
   timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
 ) -> Result[TestResult, String] {
   let started = @env.now()
-  let response = match run_request(test_case.request, context, timeout_ms~) {
+  let response = match
+    run_request(test_case.request, config, context, timeout_ms~) {
     Ok(r) => r
     Err(msg) => return Err(msg)
   }
@@ -58,8 +64,11 @@ pub fn run_test(
     response.body,
     elapsed_ms,
   )
+  // Extraction goes through the runner's own reader rather than the JSON one
+  // alone, so a `set:` may bind what a response header or cookie carries just as
+  // well as what its body does.
   for spec in test_case.expect.sets {
-    match @assert.read_json_path(response.body, spec.path) {
+    match extract_value(spec, response.headers, response.body) {
       Ok(value) => context[spec.name] = value
       Err(msg) => failures.push("set \{spec.name}: \{msg}")
     }
@@ -71,7 +80,8 @@ pub fn run_test(
 /// Execute every case of a suite, in declaration order.
 ///
 /// One variable context is created for the run and shared by all cases, which is
-/// what turns a login case into an authenticated follow-up case.
+/// what turns a login case into an authenticated follow-up case. The suite's own
+/// `config:` block is applied to every case of the run.
 pub fn run_suite(
   suite : @parser.Suite,
   timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
@@ -79,7 +89,7 @@ pub fn run_suite(
   let context = new_context()
   let results : Array[TestResult] = []
   for test_case in suite.cases {
-    match run_test(test_case, context, timeout_ms~) {
+    match run_test(test_case, suite.config, context, timeout_ms~) {
       Ok(result) => results.push(result)
       Err(msg) => return Err("\{test_case.name}: \{msg}")
     }

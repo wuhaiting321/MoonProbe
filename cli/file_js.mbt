@@ -1,3 +1,4 @@
+///|
 /// MoonProbe - cli
 ///
 /// Reading a `.probe` suite from disk.
@@ -6,7 +7,6 @@
 /// one that runs on Node.js — reaches the host through `fs.readFileSync`. Every
 /// other backend reports that reading is unsupported rather than failing with an
 /// obscure error.
-
 #cfg(target="js")
 extern "js" fn host_read_file(path : String) -> String =
   #| ((path) => {
@@ -18,6 +18,7 @@ extern "js" fn host_read_file(path : String) -> String =
   #|   }
   #| })
 
+///|
 /// Read the `.probe` suite at `path`.
 ///
 /// The reply from the host is `OK\n<contents>` on success and `ERR\n<reason>`
@@ -37,6 +38,7 @@ fn read_source(path : String) -> Result[String, String] {
   }
 }
 
+///|
 /// Reading a suite needs a file system, which only the `js` target can reach
 /// through Node.js.
 #cfg(not(target="js"))
@@ -47,6 +49,7 @@ fn read_source(path : String) -> Result[String, String] {
   )
 }
 
+///|
 #cfg(target="js")
 extern "js" fn host_write_file(path : String, contents : String) -> String =
   #| ((path, contents) => {
@@ -59,6 +62,7 @@ extern "js" fn host_write_file(path : String, contents : String) -> String =
   #|   }
   #| })
 
+///|
 /// Write `contents` to the file at `path`.
 ///
 /// Uses the same `OK\n` / `ERR\n` reply convention as `read_source`, so a write
@@ -77,6 +81,7 @@ fn write_report(path : String, contents : String) -> Result[Unit, String] {
   }
 }
 
+///|
 /// Writing a report needs a file system, which only the `js` target can reach
 /// through Node.js.
 #cfg(not(target="js"))

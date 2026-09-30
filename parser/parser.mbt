@@ -26,6 +26,9 @@
 
 ///|
 /// Parse `.probe` source text into an AST suite.
+///
+/// A `config:` block may open the file, before the first `name:` line; it holds
+/// the suite-wide defaults that the runner merges into every case.
 pub fn parse(src : String) -> Result[Suite, String] {
   let lines = match lex(src) {
     Ok(v) => v
@@ -35,11 +38,28 @@ pub fn parse(src : String) -> Result[Suite, String] {
     return Err("empty suite: no test case found")
   }
   let cases : Array[Case] = []
+  let mut config : Config? = None
   let mut i = 0
   while i < lines.length() {
     let line = lines[i]
     if line.indent != 0 {
       return Err("line \{line.line_no}: unexpected indentation at top level")
+    }
+    if line.key == "config" {
+      // The config block is a preamble: it may open the file, and only once. A
+      // second one could not mean anything, since the first has already been
+      // parsed and the cases after it were read against those defaults.
+      match config {
+        Some(_) => return Err("line \{line.line_no}: duplicate config block")
+        None => ()
+      }
+      let (parsed, next) = parse_config(lines, i + 1, line.indent, line.line_no)
+      config = match parsed {
+        Ok(c) => Some(c)
+        Err(msg) => return Err(msg)
+      }
+      i = next
+      continue
     }
     if line.key != "name" {
       return Err(
@@ -65,7 +85,157 @@ pub fn parse(src : String) -> Result[Suite, String] {
   if cases.length() == 0 {
     return Err("no test case defined")
   }
-  return Ok({ cases, })
+  let resolved = match config {
+    Some(c) => c
+    None => default_config()
+  }
+  return Ok({ config: resolved, cases, })
+}
+
+///|
+/// Parse a `config:` block, the suite-wide preamble of a `.probe` file:
+///
+/// ```text
+/// config:
+///   base_url: "https://api.example.com"   # relative urls resolve against it
+///   global_timeout: 8000                  # per-request timeout, in ms
+///   global_headers:                       # sent with every case
+///     Authorization: "Bearer ${API_TOKEN}"
+///     Accept: "application/json"
+/// ```
+///
+/// `base_url` and `global_timeout` are single values; `global_headers` is a
+/// block of `name: value` pairs, exactly like a request's `headers:` block.
+fn parse_config(
+  lines : Array[LexedLine],
+  start : Int,
+  parent_indent : Int,
+  line_no : Int,
+) -> (Result[Config, String], Int) {
+  let mut base_url : String? = None
+  let mut timeout_ms : Int? = None
+  let mut headers : Array[Pair] = []
+  let field_indent = child_indent_of(lines, start, parent_indent)
+  if field_indent < 0 {
+    return (
+      Err(
+        "line \{line_no}: config block is empty, e.g. \"config:\" followed by \"base_url: ...\"",
+      ),
+      start,
+    )
+  }
+  let mut i = start
+  while i < lines.length() {
+    let line = lines[i]
+    if line.indent <= parent_indent {
+      break
+    }
+    if line.indent != field_indent {
+      return (
+        Err("line \{line.line_no}: unexpected nesting inside the config block"),
+        i + 1,
+      )
+    }
+    match line.key {
+      "base_url" => {
+        let value = match line.value {
+          Some(v) => v
+          None =>
+            return (
+              Err("line \{line.line_no}: base_url requires a value"),
+              i + 1,
+            )
+        }
+        if !is_absolute_url(value) {
+          return (
+            Err(
+              "line \{line.line_no}: base_url must be an absolute http(s) url, got \"\{value}\"",
+            ),
+            i + 1,
+          )
+        }
+        base_url = Some(value)
+      }
+      "global_timeout" => {
+        let value = match line.value {
+          Some(v) => v
+          None =>
+            return (
+              Err("line \{line.line_no}: global_timeout requires a value"),
+              i + 1,
+            )
+        }
+        timeout_ms = match parse_int(value) {
+          Some(n) =>
+            if n < 0 {
+              return (
+                Err("line \{line.line_no}: global_timeout must not be negative"),
+                i + 1,
+              )
+            } else {
+              Some(n)
+            }
+          None =>
+            return (
+              Err(
+                "line \{line.line_no}: invalid global_timeout \"\{value}\", expected milliseconds",
+              ),
+              i + 1,
+            )
+        }
+      }
+      "global_headers" => {
+        let (pairs, ni) = parse_pairs(lines, i + 1, line.indent)
+        headers = pairs
+        i = ni
+        continue
+      }
+      _ =>
+        return (
+          Err("line \{line.line_no}: unknown config key \"\{line.key}\""),
+          i + 1,
+        )
+    }
+    i = i + 1
+  }
+  return (
+    Ok({ base_url, global_headers: headers, global_timeout_ms: timeout_ms, }),
+    i,
+  )
+}
+
+///|
+/// Whether `text` starts with `prefix`, ignoring ASCII case.
+///
+/// A `base_url` may be written with any casing of the scheme (`HTTP://`,
+/// `https://`), and the same helper serves the `header`/`cookie` prefixes of a
+/// `set:` path, so the comparison is folded rather than exact.
+fn starts_with_ignore_case(text : String, prefix : String) -> Bool {
+  if text.length() < prefix.length() {
+    return false
+  }
+  let mut i = 0
+  while i < prefix.length() {
+    if fold_ascii(text.at(i).to_int()) != fold_ascii(prefix.at(i).to_int()) {
+      return false
+    }
+    i = i + 1
+  }
+  return true
+}
+
+///|
+/// Whether two strings are equal when ASCII case is folded on both sides.
+fn equals_ignore_case(left : String, right : String) -> Bool {
+  return left.length() == right.length() && starts_with_ignore_case(left, right)
+}
+
+///|
+/// Whether `text` is an absolute HTTP(S) URL, which is what a `base_url` has to
+/// be: a relative one could not be resolved against anything.
+fn is_absolute_url(text : String) -> Bool {
+  return starts_with_ignore_case(text, "http://") ||
+    starts_with_ignore_case(text, "https://")
 }
 
 ///|
@@ -124,6 +294,15 @@ fn parse_case(
           Err(msg) => return (Err(msg), i)
         }
         i = ni
+      } else if line.key == "config" {
+        // Reached only when a `config:` block follows a case: the preamble slot
+        // is the top of the file, and it has already gone by.
+        return (
+          Err(
+            "line \{line.line_no}: the config block must appear before the first case",
+          ),
+          i + 1,
+        )
       } else {
         return (
           Err("line \{line.line_no}: unknown case key \"\{line.key}\""),
@@ -159,6 +338,7 @@ fn parse_request(
   let mut body : String? = None
   let mut headers : Array[Pair] = []
   let mut query : Array[Pair] = []
+  let mut timeout_ms : Int? = None
   let field_indent = child_indent_of(lines, start, parent_indent)
   let mut i = start
   while i < lines.length() {
@@ -193,6 +373,36 @@ fn parse_request(
           i = ni
           continue
         }
+        "timeout" => {
+          let value = match line.value {
+            Some(v) => v
+            None =>
+              return (
+                Err(
+                  "line \{line.line_no}: timeout requires a value in milliseconds",
+                ),
+                i + 1,
+              )
+          }
+          timeout_ms = match parse_int(value) {
+            Some(n) =>
+              if n < 0 {
+                return (
+                  Err("line \{line.line_no}: timeout must not be negative"),
+                  i + 1,
+                )
+              } else {
+                Some(n)
+              }
+            None =>
+              return (
+                Err(
+                  "line \{line.line_no}: invalid timeout \"\{value}\", expected milliseconds",
+                ),
+                i + 1,
+              )
+          }
+        }
         _ =>
           return (
             Err("line \{line.line_no}: unknown request field \"\{line.key}\""),
@@ -208,7 +418,7 @@ fn parse_request(
     Some(v) => v
     None => return (Err("request: missing url"), i)
   }
-  return (Ok({ http_method, url: u, headers, query, body, }), i)
+  return (Ok({ http_method, url: u, headers, query, body, timeout_ms, }), i)
 }
 
 ///|
@@ -381,7 +591,12 @@ fn parse_expect(
             Some(inline) => {
               // Inline form: `set: token = data.token`
               match split_assignment(inline) {
-                Some((name, path)) => sets.push({ name, path, })
+                Some((name, path)) =>
+                  match parse_set_target(name, path) {
+                    Ok(spec) => sets.push(spec)
+                    Err(msg) =>
+                      return (Err("line \{line.line_no}: \{msg}"), i + 1)
+                  }
                 None =>
                   return (
                     Err(
@@ -404,12 +619,15 @@ fn parse_expect(
                 if p.value.length() == 0 {
                   return (
                     Err(
-                      "line \{line.line_no}: set \"\{p.key}\" needs a json path",
+                      "line \{line.line_no}: set \"\{p.key}\" needs a source, e.g. \"data.token\"",
                     ),
                     ni,
                   )
                 }
-                sets.push({ name: p.key, path: p.value, })
+                match parse_set_target(p.key, p.value) {
+                  Ok(spec) => sets.push(spec)
+                  Err(msg) => return (Err("line \{line.line_no}: \{msg}"), ni)
+                }
               }
               i = ni
             }
@@ -712,6 +930,51 @@ fn split_assignment(s : String) -> (String, String)? {
     }
     None => None
   }
+}
+
+///|
+/// Build the extraction a `set:` directive declares from its variable name and
+/// its source text.
+///
+/// The source carries the origin as a prefix, so all three places a value can
+/// come from are written the same way:
+///
+/// ```text
+/// set: token  = data.access_token    # response body, dotted json path
+/// set: trace  = body.data.trace_id   # ... spelled out explicitly
+/// set: sid    = header.X-Session-Id  # response header, matched by name
+/// set: csrf   = cookie.csrf_token    # cookie the server set
+/// ```
+///
+/// A source without a known prefix is a body path, which keeps the original
+/// `set: token = data.token` spelling working unchanged.
+fn parse_set_target(name : String, target : String) -> Result[SetSpec, String] {
+  if name.length() == 0 {
+    return Err("set needs a variable name")
+  }
+  let (head, rest) = match target.split_once(".") {
+    Some((head, rest)) => (head.to_owned(), rest.to_owned())
+    None => (target, "")
+  }
+  let source = if equals_ignore_case(head, "header") ||
+    equals_ignore_case(head, "headers") {
+    FromHeader
+  } else if equals_ignore_case(head, "cookie") ||
+    equals_ignore_case(head, "cookies") {
+    FromCookie
+  } else if equals_ignore_case(head, "body") || equals_ignore_case(head, "json") {
+    FromBody
+  } else {
+    // No recognised prefix: the whole source is a body path.
+    return Ok({ name, source: FromBody, path: target, })
+  }
+  let path = trim(rest)
+  if path.length() == 0 {
+    return Err(
+      "set \"\{name}\": \"\{head}.\" needs a name after the dot, e.g. \"\{head}.X-Token\"",
+    )
+  }
+  return Ok({ name, source, path, })
 }
 
 ///|

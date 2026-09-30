@@ -1,3 +1,4 @@
+///|
 /// MoonProbe - runner
 ///
 /// Platform transport for the `js` backend.
@@ -7,19 +8,19 @@
 /// Node.js `child_process`. The FFI boundary only exchanges strings and
 /// integers, so no `js`-specific type leaks into the rest of the runner; every
 /// other backend gets `http_stub.mbt` instead.
-
 #cfg(target="js")
 extern "js" fn host_http(
   verb : String,
   url : String,
   headers : String,
   body : String,
-  timeout_secs : Int
+  timeout_secs : Int,
 ) -> String =
   #| ((verb, url, headers, body, timeoutSecs) => {
   #|   const cp = require("child_process");
   #|   const args = [
   #|     "-sS",
+  #|     "-i",
   #|     "-X", verb,
   #|     "-m", String(timeoutSecs),
   #|     "-w", "\n%{http_code}",
@@ -44,18 +45,10 @@ extern "js" fn host_http(
   #|   }
   #| })
 
-/// Split `s` at its first line break into `(first_line, rest)`.
-#cfg(target="js")
-fn split_first_line(s : String) -> (String, String) {
-  match s.split_once("\n") {
-    Some((head, rest)) => (head.to_owned(), rest.to_owned())
-    None => (s, "")
-  }
-}
-
+///|
 /// Parse a decimal integer, returning `None` for anything else.
 #cfg(target="js")
-fn parse_status(s : String) -> Option[Int] {
+fn parse_status(s : String) -> Int? {
   if s.length() == 0 {
     return None
   }
@@ -72,27 +65,37 @@ fn parse_status(s : String) -> Option[Int] {
   return Some(acc)
 }
 
+///|
 /// Perform the request through `curl` and decode its reply into
-/// `(status, body)`.
+/// `(status, headers, body)`.
 ///
-/// The reply is `OK\n<status>\n<body>` on success and `ERR\n<reason>` when the
-/// transport itself failed. Only the success form is split further: a failure
-/// reason is a sentence, not a set of fields, so it is reported whole.
+/// The reply is `OK\n<status>\n<payload>` on success and `ERR\n<reason>` when
+/// the transport itself failed. Only the success form is split further: a
+/// failure reason is a sentence, not a set of fields, so it is reported whole.
+///
+/// `curl` is asked for the headers too (`-i`), so the payload starts with the
+/// status line and the header block. `split_response_headers` cuts that block
+/// off; the headers matter because a `set:` directive may bind a token the
+/// server returned in a header or a cookie rather than in the body.
 #cfg(target="js")
 fn send(
   verb : String,
   url : String,
   headers : String,
   body : String,
-  timeout_ms : Int
-) -> Result[(Int, String), String] {
+  timeout_ms : Int,
+) -> Result[(Int, Array[(String, String)], String), String] {
   let raw = host_http(verb, url, headers, body, (timeout_ms + 999) / 1000)
   let (tag, rest) = split_first_line(raw)
   if tag == "OK" {
-    let (status_text, response_body) = split_first_line(rest)
+    let (status_text, payload) = split_first_line(rest)
     match parse_status(status_text) {
-      Some(status) => return Ok((status, response_body))
-      None => return Err("transport reported a malformed status: \{status_text}")
+      Some(status) => {
+        let (response_headers, response_body) = split_response_headers(payload)
+        return Ok((status, response_headers, response_body))
+      }
+      None =>
+        return Err("transport reported a malformed status: \{status_text}")
     }
   }
   return Err("http request failed: \{rest}")

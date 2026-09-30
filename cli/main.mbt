@@ -4,17 +4,23 @@
 /// every case through the runner and hand the results to the reporter. When
 /// `--junit <path>` is given, the run is also written out as JUnit XML.
 
+///|
 /// Print the usage message.
 fn print_usage() -> Unit {
   println("MoonProbe - a declarative API test runner")
   println("")
-  println("Usage: moonprobe <path/to/suite.probe> [--junit <path/to/report.xml>]")
+  println(
+    "Usage: moonprobe <path/to/suite.probe> [--junit <path/to/report.xml>]",
+  )
   println("")
   println("Example:")
   println("  moon run cli --target js -- examples/httpbin.probe")
-  println("  moon run cli --target js -- examples/httpbin.probe --junit junit.xml")
+  println(
+    "  moon run cli --target js -- examples/httpbin.probe --junit junit.xml",
+  )
 }
 
+///|
 /// Pick the `.probe` path out of the command line.
 ///
 /// The leading arguments differ per backend — on the `js` target the Node.js
@@ -32,6 +38,7 @@ fn suite_path(args : Array[String]) -> String? {
   return None
 }
 
+///|
 /// The path given after `--junit`, if any.
 fn junit_path(args : Array[String]) -> String? {
   let mut i = 0
@@ -44,6 +51,7 @@ fn junit_path(args : Array[String]) -> String? {
   return None
 }
 
+///|
 fn main {
   let args = @env.args()
   let path = match suite_path(args) {

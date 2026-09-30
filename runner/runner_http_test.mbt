@@ -3,6 +3,18 @@
 ///
 /// These exercise a real network round trip, so they only run on the `js`
 /// target, where the host provides `curl` through Node.js `child_process`.
+
+///|
+/// The first case and its suite config, ready to be handed to the runner.
+#cfg(target="js")
+fn case_of(source : String) -> (@parser.Case, @parser.Config) raise {
+  match @parser.parse(source) {
+    Ok(suite) => (suite.cases[0], suite.config)
+    Err(msg) => fail("fixture should parse: \{msg}")
+  }
+}
+
+///|
 #cfg(target="js")
 test "run_request performs a real http round trip" {
   let source =
@@ -12,16 +24,16 @@ test "run_request performs a real http round trip" {
     #|expect:
     #|  status: 200
     #|
-  let request = match @parser.parse(source) {
-    Ok(suite) => suite.cases[0].request
-    Err(msg) => fail("fixture should parse: \{msg}")
-  }
-  let response = match @runner.run_request(request, @runner.new_context()) {
+  let (test_case, config) = case_of(source)
+  let response = match
+    @runner.run_request(test_case.request, config, @runner.new_context()) {
     Ok(r) => r
     Err(msg) => fail("request should succeed: \{msg}")
   }
   @test.assert_eq(response.status, 200)
   @test.assert_eq(response.body.length() > 0, true)
+  // The transport asks for the headers too, so a response always carries them.
+  @test.assert_eq(response.headers.length() > 0, true)
 }
 
 ///|
@@ -34,23 +46,16 @@ test "run_request surfaces transport failures as Err" {
     #|expect:
     #|  status: 200
     #|
-  let request = match @parser.parse(source) {
-    Ok(suite) => suite.cases[0].request
-    Err(msg) => fail("fixture should parse: \{msg}")
-  }
-  match @runner.run_request(request, @runner.new_context(), timeout_ms=5000) {
+  let (test_case, config) = case_of(source)
+  match
+    @runner.run_request(
+      test_case.request,
+      config,
+      @runner.new_context(),
+      timeout_ms=5000,
+    ) {
     Err(_) => ()
     Ok(response) => fail("expected a transport error, got \{response.status}")
-  }
-}
-
-///|
-/// Parse `.probe` source into the case it declares.
-#cfg(target="js")
-fn case_of(source : String) -> @parser.Case raise {
-  match @parser.parse(source) {
-    Ok(suite) => suite.cases[0]
-    Err(msg) => fail("fixture should parse: \{msg}")
   }
 }
 
@@ -64,13 +69,62 @@ test "run_test reports a passing case end to end" {
     #|expect:
     #|  status: 200
     #|
-  let result = match @runner.run_test(case_of(source), @runner.new_context()) {
+  let (test_case, config) = case_of(source)
+  let result = match
+    @runner.run_test(test_case, config, @runner.new_context()) {
     Ok(r) => r
     Err(msg) => fail("case should run: \{msg}")
   }
   @test.assert_eq(result.name, "end to end")
   @test.assert_eq(result.response.status, 200)
   @test.assert_eq(result.passed(), true)
+}
+
+///|
+#cfg(target="js")
+test "run_test resolves a relative url against the suite base_url" {
+  let source =
+    #|config:
+    #|  base_url: "https://example.com"
+    #|name: "relative url"
+    #|request:
+    #|  url: "/"
+    #|expect:
+    #|  status: 200
+    #|
+  let (test_case, config) = case_of(source)
+  let result = match
+    @runner.run_test(test_case, config, @runner.new_context()) {
+    Ok(r) => r
+    Err(msg) => fail("case should run: \{msg}")
+  }
+  @test.assert_eq(result.passed(), true)
+}
+
+///|
+#cfg(target="js")
+test "run_test binds a value read from a response header" {
+  // The one assertion that proves the transport really asked for the headers:
+  // `example.com` always describes its body, so the directive must find it.
+  let source =
+    #|name: "header extraction"
+    #|request:
+    #|  url: "https://example.com"
+    #|expect:
+    #|  status: 200
+    #|  set: kind = header.Content-Type
+    #|
+  let (test_case, config) = case_of(source)
+  let context = @runner.new_context()
+  let result = match @runner.run_test(test_case, config, context) {
+    Ok(r) => r
+    Err(msg) => fail("case should run: \{msg}")
+  }
+  @test.assert_eq(result.passed(), true)
+  match context.get("kind") {
+    Some(value) => @test.assert_eq(value.contains("text/html"), true)
+    None => fail("Content-Type should have been bound to `kind`")
+  }
 }
 
 ///|
@@ -85,7 +139,9 @@ test "run_test carries the assertion failures of a mismatching case" {
     #|  json:
     #|    missing: "nope"
     #|
-  let result = match @runner.run_test(case_of(source), @runner.new_context()) {
+  let (test_case, config) = case_of(source)
+  let result = match
+    @runner.run_test(test_case, config, @runner.new_context()) {
     Ok(r) => r
     Err(msg) => fail("case should run: \{msg}")
   }
@@ -136,8 +192,9 @@ test "run_test records a failed extraction as a failure" {
     #|
   // example.com answers with HTML, so the path cannot be read: the case must
   // fail with an extraction message rather than abort the whole run.
+  let (test_case, config) = case_of(source)
   let context = @runner.new_context()
-  let result = match @runner.run_test(case_of(source), context) {
+  let result = match @runner.run_test(test_case, config, context) {
     Ok(r) => r
     Err(msg) => fail("case should run: \{msg}")
   }
@@ -165,7 +222,9 @@ test "run_test feeds the measured duration and the raw body to the assertions" {
     #|  contains_ci: "example domain"
     #|  duration_ms >= 0
     #|
-  let result = match @runner.run_test(case_of(source), @runner.new_context()) {
+  let (test_case, config) = case_of(source)
+  let result = match
+    @runner.run_test(test_case, config, @runner.new_context()) {
     Ok(r) => r
     Err(msg) => fail("case should run: \{msg}")
   }
@@ -181,8 +240,9 @@ test "run_test feeds the measured duration and the raw body to the assertions" {
     #|  status: 200
     #|  duration_ms < 0
     #|
+  let (case_fail, config_fail) = case_of(impossible)
   let failed = match
-    @runner.run_test(case_of(impossible), @runner.new_context()) {
+    @runner.run_test(case_fail, config_fail, @runner.new_context()) {
     Ok(r) => r
     Err(msg) => fail("case should run: \{msg}")
   }

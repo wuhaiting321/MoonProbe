@@ -20,6 +20,9 @@ pub struct Request {
   query : Array[Pair]
   /// Optional raw request body. `None` means no body was declared.
   body : String?
+  /// Case-level timeout in milliseconds, which wins over the config block's
+  /// `global_timeout`. `None` means the case did not declare one.
+  timeout_ms : Int?
 }
 
 ///|
@@ -30,12 +33,61 @@ pub struct JsonCheck {
 }
 
 ///|
+/// Where a `set:` directive reads the value it binds.
+///
+/// The source is written as a prefix on the path, so
+/// `set: token = header.X-Token` reads a response header while
+/// `set: token = cookie.session` reads a cookie the server set. A path without a
+/// prefix means the response body.
+pub enum SetSource {
+  FromBody
+  FromHeader
+  FromCookie
+} derive(Eq)
+
+///|
 /// A variable extraction performed after a case succeeds, e.g.
 /// `set: token = data.token` binds the value found at the JSON path
 /// `data.token` to the variable name `token`.
 pub struct SetSpec {
   name : String
+  /// Where the value is read from: body, response header or cookie.
+  source : SetSource
+  /// Dotted JSON path, header name or cookie name, depending on `source`.
   path : String
+}
+
+///|
+/// The suite-wide `config:` block that sits at the top of a `.probe` file.
+///
+/// Everything here is a default: a case may still declare its own URL, headers
+/// and timeout, and what it declares wins over what the config block declares.
+pub struct Config {
+  /// Absolute URL a relative `url:` is resolved against. `None` means relative
+  /// URLs are rejected.
+  base_url : String?
+  /// Headers sent with every case, unless a case declares the same header.
+  global_headers : Array[Pair]
+  /// Per-request timeout for every case, in milliseconds.
+  global_timeout_ms : Int?
+}
+
+///|
+/// The empty config: no base URL, no global headers, no global timeout.
+///
+/// This is what a `.probe` file that declares no `config:` block parses into,
+/// and it is what a caller that drives the runner by hand starts from.
+pub fn default_config() -> Config {
+  return { base_url: None, global_headers: [], global_timeout_ms: None, }
+}
+
+///|
+/// Whether the config block declares nothing at all.
+pub fn Config::is_empty(self : Config) -> Bool {
+  match (self.base_url, self.global_timeout_ms) {
+    (None, None) => self.global_headers.length() == 0
+    _ => false
+  }
 }
 
 ///|
@@ -153,7 +205,9 @@ pub struct Case {
 }
 
 ///|
-/// A whole `.probe` test suite made of one or more cases.
+/// A whole `.probe` test suite: its suite-wide config and its cases.
 pub struct Suite {
+  /// The `config:` block, or the empty config when the file declares none.
+  config : Config
   cases : Array[Case]
 }
