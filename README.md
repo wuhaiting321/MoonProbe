@@ -20,8 +20,9 @@
 | GitHub 仓库 | <https://github.com/wuhaiting321/MoonProbe> |
 | 项目方向 | MoonBit 开发者工具 / API 测试基础设施 |
 | 是否为移植项目 | 否，原创项目 |
-| 代码规模 | 3409 行 MoonBit 源码 + 3229 行测试代码，16 个 `.mbt` 文件，合计约 6638 行 |
-| 测试状态 | `moon test --target wasm-gc` 全部通过（182 个用例，0 失败）；`js` 后端在此基础上另含 9 个真实网络用例 |
+| 模块名 | `wuhaiting321/moonprobe`（遵循 mooncakes.io 的 `<author>/<module>` 命名规范） |
+| 代码规模 | 4030 行 MoonBit 源码 + 4468 行测试代码，16 个 `.mbt` 文件，合计 8498 行 |
+| 测试状态 | `moon test --target wasm-gc` 全部通过（237 个用例，0 失败）；`js` 后端在此基础上另含 9 个真实网络用例 |
 | 构建状态 | `wasm-gc` 与 `js` 后端 `moon check` 零错误、零告警 |
 | 开源许可证 | Apache-2.0 |
 
@@ -93,22 +94,84 @@ MoonProbe 用于补齐这块空白：一个纯 MoonBit 实现的声明式 API �
 
 ---
 
-## 四、技术亮点与实现说明
+## 四、安装方式与快速开始
 
-### 4.1 包结构与职责
+### 4.1 前置要求
+
+| 依赖 | 版本要求 | 说明 |
+| --- | --- | --- |
+| MoonBit 工具链 | `moonc` ≥ 0.10.14 | 项目以 MoonBit 为主要实现语言；CI 每次都安装官方发布的最新工具链进行验证 |
+| Node.js | 运行 `.probe` 用例时需要 | CLI 在 `js` 后端通过 Node.js 调用宿主机 `curl`；`moon check` / `moon test` 不需要 |
+| 网络 | 运行会访问真实站点的用例时需要 | 单元测试完全离线，不受网络影响 |
+
+安装 MoonBit 工具链（Linux / macOS）：
+
+```bash
+curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+export PATH="$HOME/.moon/bin:$PATH"
+moon version --all          # 应显示 moonc v0.10.14 或更高
+```
+
+> 若 `cli.moonbitlang.com` 不可达，可改用镜像 `https://cli.moonbitlang.cn/install/unix.sh`
+> （CI 中即按此顺序回退重试）。Windows 安装包见 <https://www.moonbitlang.com/download/>。
+
+### 4.2 获取项目
+
+```bash
+git clone https://github.com/wuhaiting321/MoonProbe.git
+cd MoonProbe
+```
+
+### 4.3 最小可运行示例
+
+仓库自带的最小示例 `examples/example_com.probe` 对公开站点 `example.com` 发一个 GET
+并断言状态码为 200：
+
+```bash
+moon run cli --target js -- examples/example_com.probe
+```
+
+预期输出（访问的是公网站点，耗时随网络变化）：
+
+```text
+[PASS] example.com answers with 200
+
+Summary: 1 total, 1 passed, 0 failed in 3742 ms
+Result: PASSED
+```
+
+另外两个示例：`examples/httpbin.probe`（查询参数 + JSON 嵌套字段断言）、
+`examples/auth_chain.probe`（变量提取与用例串联，可直接生成 JUnit 报告）。
+
+> **运行 CLI 必须带 `--target js`**，原因见 5.5 节。
+
+### 4.4 作为依赖安装
+
+模块名遵循 mooncakes.io 的 `<author>/<module>` 规范，发布到注册表后即可作为依赖引入：
+
+```bash
+moon add wuhaiting321/moonprobe
+```
+
+---
+
+## 五、技术亮点与实现说明
+
+### 5.1 包结构与职责
 
 | 包 | 职责 | 源码规模 |
 | --- | --- | --- |
-| `parser/` | 词法分析、AST 定义、`.probe` 文件解析（含 `config:` 块） | 1530 行 |
-| `runner/` | 配置合并、占位符插值、HTTP 传输、变量提取与用例编排 | 928 行 |
+| `parser/` | 词法分析、AST 定义、`.probe` 文件解析（含 `config:` 块） | 1835 行 |
+| `runner/` | 配置合并、占位符插值、HTTP 传输、变量提取与用例编排 | 1244 行 |
 | `assert/` | 状态码、JSON 路径、文本、长度、类型、schema、耗时断言 | 598 行 |
 | `reporter/` | 控制台报告输出、JUnit XML 报告生成 | 164 行 |
 | `cli/` | 命令行入口、宿主文件读写 FFI | 189 行 |
 
 依赖方向单向：`cli → reporter → runner → assert → parser`，不存在环。
-上表为源码行数（合计 3409 行），另有 3229 行测试代码，总计约 6638 行。
+上表为源码文件的总行数（合计 4030 行），另有 4468 行测试代码，总计 8498 行；
+验收脚本 `check_验收.sh` / `check_验收.ps1` 按「非空行」口径统计为 3868 行（要求 > 1500）。
 
-### 4.2 核心技术实现
+### 5.2 核心技术实现
 
 1. **纯 MoonBit 实现，零第三方依赖。** 解析器、执行器、断言引擎、报告生成与 CLI
    全部由 MoonBit 编写，仅依赖官方标准库 `moonbitlang/core`。
@@ -157,7 +220,7 @@ MoonProbe 用于补齐这块空白：一个纯 MoonBit 实现的声明式 API �
    解析都做成可注入的纯函数，因此这两条路径在 `wasm-gc` 上也能被完整测到；
    CI 只跑 `wasm-gc` 即可覆盖纯逻辑，不受外部服务可用性影响。
 
-### 4.3 `.probe` 用例格式
+### 5.3 `.probe` 用例格式
 
 ```text
 # 套件级全局配置：对本文件的所有用例生效
@@ -229,7 +292,7 @@ expect:
 `set` 同样支持块式写法（`set:` 下挂多个 `键: 路径`）一次提取多个变量。
 第二个用例只有在真正拿到第一个用例提取出的 `token` 时才会通过。
 
-### 4.4 与现有方案的差异
+### 5.4 与现有方案的差异
 
 | 维度 | `.http` / `hurl` / Karate | `moon test` | MoonProbe |
 | --- | --- | --- | --- |
@@ -241,7 +304,7 @@ expect:
 | 套件级配置与环境变量 | 各自语法 | 无 | `config:` 块 + `${ENV}` 注入 |
 | 断言族 | 视工具而定 | 由代码自行编写 | 状态码 / JSON / 文本 / 长度 / 类型 / schema / 耗时 |
 
-### 4.5 构建与运行
+### 5.5 构建与运行
 
 ```bash
 # 静态检查与单元测试（不依赖网络与 Node.js）
@@ -259,7 +322,16 @@ moon run cli --target js -- examples/auth_chain.probe --junit junit.xml
 > 发起真实 HTTP 请求，并依赖 JS 宿主读写 `.probe` 用例文件与报告文件；
 > 用其他后端（如 `native`）运行会直接失败。模块的 `preferred_target` 也已设为 `js`。
 
-### 4.6 `examples/` 目录的性质
+以上检查已固化为验收脚本：`check_验收.sh`（Linux / macOS）与 `check_验收.ps1`（Windows）
+会依次执行代码规模统计、两个后端的 `moon check`、`moon build --target js`、
+`moon test --target wasm-gc`、`moon fmt --check` 与提交记录统计，全部通过才返回 0：
+
+```bash
+bash check_验收.sh                                          # Linux / macOS
+powershell -ExecutionPolicy Bypass -File .\check_验收.ps1   # Windows
+```
+
+### 5.6 `examples/` 目录的性质
 
 `examples/` 下的 `.probe` 文件是**示例用例，需要手动运行验证**，
 **不属于自动化测试套件**：
@@ -272,7 +344,7 @@ moon run cli --target js -- examples/auth_chain.probe --junit junit.xml
 `examples/` 目前提供三个可直接运行的示例：`example_com.probe`（最小 GET）、
 `httpbin.probe`（查询参数 + JSON 嵌套字段断言）、`auth_chain.probe`（变量提取与串联）。
 
-### 4.7 原创性与参考说明
+### 5.7 原创性与参考说明
 
 本项目**不是移植项目**，`.probe` 语法、词法分析器、解析器、执行器、断言引擎、
 报告生成器与 CLI 全部为原创实现，不包含任何来源不明的代码、私有代码、闭源代码
