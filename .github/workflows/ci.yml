@@ -8,7 +8,7 @@ on:
 
 jobs:
   check-and-test:
-    name: moon check / moon test (wasm-gc)
+    name: moon check / test / build (wasm-gc + js)
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repository
@@ -22,11 +22,17 @@ jobs:
       - name: Show the toolchain version
         run: moon version --all
 
-      - name: Check every package
+      - name: Check every package on the wasm-gc target
         run: moon check --target wasm-gc
 
-      - name: Run the unit tests
+      - name: Run the unit tests on the wasm-gc target
         run: moon test --target wasm-gc
 
-      - name: Build the whole module
+      - name: Build the whole module on the wasm-gc target
         run: moon build --target wasm-gc
+
+      - name: Check every package on the js target
+        run: moon check --target js
+
+      - name: Build the whole module on the js target
+        run: moon build --target js
