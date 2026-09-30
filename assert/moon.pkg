@@ -3,11 +3,11 @@
 // depends on `parser` and on the core JSON decoder — never on the runner.
 
 import {
-  "MoonProbe/parser",
+  "wuhaiting321/moonprobe/parser",
   "moonbitlang/core/json",
 }
 
 import {
-  "MoonProbe/parser",
+  "wuhaiting321/moonprobe/parser",
   "moonbitlang/core/test",
 } for "test"

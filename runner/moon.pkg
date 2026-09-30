@@ -3,13 +3,13 @@
 // consumed by the reporter.
 
 import {
-  "MoonProbe/parser",
-  "MoonProbe/assert",
+  "wuhaiting321/moonprobe/parser",
+  "wuhaiting321/moonprobe/assert",
   "moonbitlang/core/env",
 }
 
 import {
-  "MoonProbe/parser",
+  "wuhaiting321/moonprobe/parser",
   "moonbitlang/core/env",
   "moonbitlang/core/test",
 } for "test"

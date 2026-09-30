@@ -2,9 +2,9 @@
 // parses it, executes every case through the runner and prints the report.
 
 import {
-  "MoonProbe/parser",
-  "MoonProbe/runner",
-  "MoonProbe/reporter",
+  "wuhaiting321/moonprobe/parser",
+  "wuhaiting321/moonprobe/runner",
+  "wuhaiting321/moonprobe/reporter",
   "moonbitlang/core/env",
 }
 

@@ -1,4 +1,4 @@
-name = "MoonProbe"
+name = "wuhaiting321/moonprobe"
 
 version = "0.1.0"
 

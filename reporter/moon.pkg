@@ -2,10 +2,10 @@
 // the per-case outcome from the runner, never the parser or the network.
 
 import {
-  "MoonProbe/runner",
+  "wuhaiting321/moonprobe/runner",
 }
 
 import {
-  "MoonProbe/parser",
+  "wuhaiting321/moonprobe/parser",
   "moonbitlang/core/test",
 } for "test"
