@@ -4,7 +4,7 @@
 /// values. It is responsible for pure lexical concerns only:
 ///
 ///   - splitting the source into lines
-///   - skipping blank lines and `#` comments
+///   - skipping blank lines, and stripping `#` comments wherever they appear
 ///   - computing each line's indentation level
 ///   - splitting each line into a `key` and an optional `value`
 ///   - decoding the escape sequences of a quoted value
@@ -37,17 +37,16 @@ pub fn lex(src : String) -> Result[Array[LexedLine], String] {
   let out : Array[LexedLine] = []
   let mut line_no = 1
   for raw in lines {
-    let trimmed = raw.trim().to_owned()
-    if trimmed.length() == 0 {
+    // Comments are removed first, so a comment-only line becomes blank and is
+    // skipped just like an empty one — at any indentation, and without
+    // disturbing the indentation of the code that precedes it on the line.
+    let code = strip_comment(raw)
+    if code.length() == 0 {
       line_no = line_no + 1
       continue
     }
-    if trimmed.has_prefix("#") {
-      line_no = line_no + 1
-      continue
-    }
-    let (ws_len, indent) = measure_indent(raw)
-    let rest = raw.view(start_offset=ws_len).to_owned()
+    let (ws_len, indent) = measure_indent(code)
+    let rest = code.view(start_offset=ws_len).to_owned()
     match split_key_value(rest) {
       Some((key, value)) => out.push({ indent, key, value, line_no, })
       None =>
@@ -61,6 +60,51 @@ pub fn lex(src : String) -> Result[Array[LexedLine], String] {
     line_no = line_no + 1
   }
   return Ok(out)
+}
+
+///|
+/// Remove a `#` comment from `line` and trim the whitespace that introduced it,
+/// leaving everything before the comment untouched.
+///
+/// A `#` opens a comment when both hold:
+///
+///   - it is not inside a single- or double-quoted string, and
+///   - it is either the first character of the line or preceded by a space/tab.
+///
+/// The second rule is the convention every indentation-sensitive format (YAML,
+/// hurl) follows, and it is what keeps a literal hash usable in an unquoted
+/// value: `Authorization: Bearer a#b` and `url: https://x/a#frag` keep their
+/// `#`, while `status: 200  # ok` loses the explanation. A value that must
+/// *begin* with `#` can always be quoted — `contains: "#tag"`.
+///
+/// The quote state is tracked per line and starts fresh, so an unbalanced quote
+/// inside a comment can never leak into the code part.
+fn strip_comment(line : String) -> String {
+  let n = line.length()
+  let mut i = 0
+  let mut single = false
+  let mut double = false
+  let mut cut = -1
+  while i < n {
+    let c = line.at(i).to_int()
+    if !single && c == DOUBLE_QUOTE {
+      double = !double
+    } else if !double && c == SINGLE_QUOTE {
+      single = !single
+    } else if !single &&
+      !double &&
+      c == HASH &&
+      (i == 0 || is_horizontal_space(line.at(i - 1).to_int())) {
+      cut = i
+      break
+    }
+    i = i + 1
+  }
+  let mut end = if cut >= 0 { cut } else { n }
+  while end > 0 && is_horizontal_space(line.at(end - 1).to_int()) {
+    end = end - 1
+  }
+  return line.view(start_offset=0, end_offset=end).to_owned()
 }
 
 ///|
@@ -99,9 +143,9 @@ fn split_key_value(line : String) -> (String, String?)? {
   let mut double = false
   while i < n {
     let c = line.at(i).to_int()
-    if !single && c == 0x22 {
+    if !single && c == DOUBLE_QUOTE {
       double = !double
-    } else if !double && c == 0x27 {
+    } else if !double && c == SINGLE_QUOTE {
       single = !single
     } else if !single && !double && c == 0x3a {
       // Found the key/value separator `:`.
@@ -184,6 +228,18 @@ fn unescape(text : String) -> String {
 ///|
 /// The code point of the backslash character.
 const BACKSLASH : Int = 0x5c
+
+///|
+/// The code point of `#`, which opens a comment.
+const HASH : Int = 0x23
+
+///|
+/// The code point of the double quote, which starts a string value.
+const DOUBLE_QUOTE : Int = 0x22
+
+///|
+/// The code point of the single quote, which starts a string value.
+const SINGLE_QUOTE : Int = 0x27
 
 ///|
 /// Split a bare comparison expression such as `duration_ms < 500` into

@@ -1387,3 +1387,113 @@ test "parse rejects a set prefix without a name after the dot" {
     Ok(_) => fail("`header.` alone names nothing to read")
   }
 }
+
+// ---------------------------------------------------------------------------
+// Trailing inline comments
+// ---------------------------------------------------------------------------
+
+///|
+/// A suite whose every construct carries a trailing `#` comment: the config
+/// block, the case header, the request fields and the assertions all still have
+/// to lex down to exactly the same values as their uncommented twins.
+const FX_INLINE_COMMENTS : String =
+  #|config:                                  # suite-wide defaults
+  #|  base_url: "https://a.api.test"         # relative urls resolve against it
+  #|  global_timeout: 4000                   # milliseconds
+  #|  global_headers:
+  #|    Accept: "application/json"           # sent with every case
+  #|
+  #|name: "commented"                        # the case label
+  #|request:
+  #|  method: GET                             # the verb
+  #|  url: "/users"                           # the path
+  #|  headers:
+  #|    X-Trace: "Bearer a#b"                 # this hash is inside quotes
+  #|  query:
+  #|    page: 1                               # a query parameter
+  #|expect:
+  #|  status: 200                             # an exact match
+  #|  contains: "#tag"                        # this hash is inside quotes
+  #|  duration_ms <= 3000                     # a bare comparison
+  #|  set: token = data.access_token          # an extraction
+  #|
+
+///|
+test "lex strips a trailing comment after a quoted value" {
+  let lines = match lex("  url: \"/users\"    # the endpoint\n") {
+    Ok(v) => v
+    Err(msg) => fail("lex should succeed: \{msg}")
+  }
+  @test.assert_eq(lines[0].key, "url")
+  @test.assert_eq(lines[0].indent, 2)
+  @test.assert_eq(lines[0].value.unwrap_or(""), "/users")
+}
+
+///|
+test "lex strips a trailing comment after a bare comparison" {
+  let lines = match lex("  duration_ms <= 2000   # a generous budget\n") {
+    Ok(v) => v
+    Err(msg) => fail("lex should succeed: \{msg}")
+  }
+  @test.assert_eq(lines[0].key, "duration_ms")
+  @test.assert_eq(lines[0].value.unwrap_or(""), "<= 2000")
+}
+
+///|
+test "lex keeps a hash that is glued to an unquoted value" {
+  let lines = match lex("url: https://a.api.test/x#frag\n") {
+    Ok(v) => v
+    Err(msg) => fail("lex should succeed: \{msg}")
+  }
+  @test.assert_eq(lines[0].value.unwrap_or(""), "https://a.api.test/x#frag")
+}
+
+///|
+test "lex keeps a hash that sits inside a quoted value" {
+  let lines = match lex("contains: \"#tag\"  # a real comment\n") {
+    Ok(v) => v
+    Err(msg) => fail("lex should succeed: \{msg}")
+  }
+  @test.assert_eq(lines[0].key, "contains")
+  @test.assert_eq(lines[0].value.unwrap_or(""), "#tag")
+}
+
+///|
+test "lex drops a comment indented deeper than the code around it" {
+  let src = "expect:\n  status: 200\n        # far deeper than the fields\n  json:\n    ok: true\n"
+  let lines = match lex(src) {
+    Ok(v) => v
+    Err(msg) => fail("lex should succeed: \{msg}")
+  }
+  @test.assert_eq(lines.length(), 4)
+  @test.assert_eq(lines[1].key, "status")
+  @test.assert_eq(lines[2].key, "json")
+  @test.assert_eq(lines[3].indent, 4)
+}
+
+///|
+test "parse accepts a trailing comment on every line of a suite" {
+  let suite = match parse(FX_INLINE_COMMENTS) {
+    Ok(v) => v
+    Err(msg) => fail("parse should succeed: \{msg}")
+  }
+  @test.assert_eq(suite.config.base_url.unwrap_or(""), "https://a.api.test")
+  @test.assert_eq(suite.config.global_timeout_ms.unwrap_or(-1), 4000)
+  @test.assert_eq(suite.config.global_headers.length(), 1)
+  @test.assert_eq(suite.config.global_headers[0].key, "Accept")
+  @test.assert_eq(suite.config.global_headers[0].value, "application/json")
+  @test.assert_eq(suite.cases.length(), 1)
+  let first = suite.cases[0]
+  @test.assert_eq(first.name, "commented")
+  @test.assert_eq(first.request.http_method, "GET")
+  @test.assert_eq(first.request.url, "/users")
+  @test.assert_eq(first.request.headers[0].value, "Bearer a#b")
+  @test.assert_eq(first.request.query[0].key, "page")
+  @test.assert_eq(first.request.query[0].value, "1")
+  @test.assert_eq(first.expect.status.unwrap_or(-1), 200)
+  @test.assert_eq(first.expect.contains[0].needle, "#tag")
+  @test.assert_eq(first.expect.duration.unwrap().limit_ms, 3000)
+  @test.assert_eq(first.expect.duration.unwrap().op, "<=")
+  @test.assert_eq(first.expect.sets[0].name, "token")
+  @test.assert_eq(first.expect.sets[0].path, "data.access_token")
+}

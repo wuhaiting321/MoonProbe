@@ -55,6 +55,8 @@ MoonProbe 用于补齐这块空白：一个纯 MoonBit 实现的声明式 API �
 
 - **声明式用例格式**：`.probe` 文本格式，缩进敏感、类 YAML 风格；
   单个文件可包含多个用例，按顺序串行执行。
+- **注释**：`#` 注释可以独占一行（可带任意缩进），也可以跟在任意一行代码末尾；
+  引号内的 `#` 与紧贴文本的 `#`（如 `https://x/a#frag`）不算注释。
 - **套件级全局配置**：文件顶部可用 `config:` 块声明 `base_url`（相对 URL 的基址）、
   `global_headers`（每个用例都会带上的请求头）与 `global_timeout`（每个用例的默认超时）；
   运行器在发请求前自动合并，用例自身的声明优先于全局配置。
@@ -112,7 +114,9 @@ MoonProbe 用于补齐这块空白：一个纯 MoonBit 实现的声明式 API �
    全部由 MoonBit 编写，仅依赖官方标准库 `moonbitlang/core`。
    只有"发起网络请求 / 读写文件"这类宿主能力通过 `extern "js"` 桥接，
    边界收敛在 5 个函数内。
-2. **解析器（`parser`）。** 手写词法分析器处理缩进、注释与引号；
+2. **解析器（`parser`）。** 手写词法分析器处理缩进、引号与注释——注释在分行后
+   立即被剥离（引号内的 `#` 与紧贴文本的 `#` 豁免），所以注释可以出现在任意
+   位置，且不会干扰每一行的缩进判定；
    递归下降解析器产出 AST（`Config` / `Request` / `Expect` / `JsonCheck` /
    `SetSpec` / `LengthCheck` / `TypeCheck` / `SchemaField`），
    对未声明的键、越界的嵌套与格式错误的取值显式报错并给出行号。
@@ -158,66 +162,56 @@ MoonProbe 用于补齐这块空白：一个纯 MoonBit 实现的声明式 API �
 ```text
 # 套件级全局配置：对本文件的所有用例生效
 config:
-  # 相对 url 的基址
-  base_url: "https://httpbin.org"
-  # 每个用例的默认超时（毫秒）
-  global_timeout: 8000
-  # 每个用例都会带上的请求头，值里可以引用宿主环境变量
-  global_headers:
+  base_url: "https://httpbin.org"          # 相对 url 的基址
+  global_timeout: 8000                     # 每个用例的默认超时（毫秒）
+  global_headers:                          # 每个用例都会带上的请求头
     Accept: "application/json"
-    Authorization: "Bearer ${API_TOKEN}"
+    Authorization: "Bearer ${API_TOKEN}"   # 值里可以引用宿主环境变量
 
 name: "1. read the token from the response"
 request:
   method: GET
-  # 相对 url：拼接 config 里的 base_url
-  url: "/response-headers"
-  # httpbin 会把查询参数原样变成响应头，方便演示三种取值来源
+  url: "/response-headers"                 # 相对 url：拼接 config 里的 base_url
   query:
+    # httpbin 会把查询参数原样变成响应头，方便演示三种取值来源
     echo: "demo-token-42"
     X-Trace-Id: "trace-7f3a"
     Set-Cookie: "session=abc123"
 expect:
   status: 200
-  # 点号路径校验嵌套字段
   json:
-    echo: "demo-token-42"
-  # 原始响应文本必须包含该子串
-  contains: "demo-token-42"
-  # JSON 类型
+    echo: "demo-token-42"                  # 点号路径校验嵌套字段
+  contains: "demo-token-42"                # 原始响应文本必须包含该子串
   type:
-    echo: string
-  # 耗时预算
-  duration_ms <= 2000
-  # 分别从响应 JSON、响应头与 Cookie 提取变量
-  set: token = echo
-  set: trace = header.X-Trace-Id
-  set: sid = cookie.session
+    echo: string                           # JSON 类型
+  duration_ms <= 2000                      # 耗时预算
+  set: token = echo                        # 从响应 JSON 取值
+  set: trace = header.X-Trace-Id           # 从响应头取值
+  set: sid = cookie.session                # 从 Cookie 取值
 
 name: "2. send the extracted token back"
 request:
   method: GET
   url: "/get"
-  # 用例级超时，优先于 global_timeout
-  timeout: 3000
+  timeout: 3000                            # 用例级超时，优先于 global_timeout
   query:
-    # 引用上一个用例提取的变量
-    echo: "{{token}}"
+    echo: "{{token}}"                      # 引用上一个用例提取的变量
   headers:
     Authorization: "Bearer {{token}}"
 expect:
   status: 200
   json:
     args.echo: "demo-token-42"
-  # 必需字段用 `!` 标记，object 下的缩进行是它的嵌套结构
   schema:
-    args: object!
-      echo: string!
+    args: object!                          # 必需字段用 `!` 标记
+      echo: string!                        # object 下的缩进行是它的嵌套结构
     url: string!
 ```
 
-> 注释必须独占一行（可带缩进）。词法分析器不识别行尾注释，
-> `url: "/get"  # 说明` 会把 `# 说明` 一并当成值。
+> `#` 注释既可独占一行（缩进随意），也可跟在任意一行末尾；两者都在词法阶段
+> 被剥离，所以既不影响缩进判定，也不会混进值里。引号内的 `#` 不算注释，紧贴
+> 文本的 `#` 也不算——`url: https://x/a#frag` 会保留 `#frag`。值本身要以 `#`
+> 开头时必须加引号，例如 `contains: "#tag"`。
 
 `config:` 必须写在首个用例之前，且一个文件只允许出现一次。其中 `base_url`
 只对相对 URL 生效，写绝对 URL 的用例不受影响；`global_headers` 与用例自身
