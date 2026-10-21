@@ -278,6 +278,29 @@ moon add wuhaiting321/moonprobe
    则在任何路径上都执行——用例出错时，恰恰是清理最要紧的时候。钩子的失败信息一律带
    `before_each "<步骤名>"` 之类的前缀，以免被误读成用例本身的失败。
 
+### 5.2.1 HTTP 协议符合性矩阵与能力边界
+
+“自研 HTTP 栈”指的是**协议语义完全由 MoonBit 实现**，而不是连 TCP/TLS 握手的每个字节都由
+本仓库完成。为避免初审时把能力理解为超出实际，这里逐项列出当前行为与边界：
+
+| 能力 | 实现位置 | 当前行为 | 边界 / 未实现 |
+| --- | --- | --- | --- |
+| URL 解析 | `http/url.mbt` | scheme、host、IPv6、端口、path、query、fragment 全量解析；userinfo 丢弃 | 只接受绝对 URL；相对 URL 由运行器的 `base_url` 补全 |
+| fragment | `http/url.mbt` | 保留在 `Url` 值中供回读，`request_target()` 只输出 `path?query` | fragment 不参与请求，也不会被提升为查询串 |
+| 请求渲染 | `http/client.mbt` | `Host` 必填（IPv6 加方括号、默认端口省略）、CRLF 行尾、默认 `User-Agent` / `Accept` / `Connection: close` | 请求体**整段**渲染后发送，未实现流式分块上传或 multipart 自动编码 |
+| `Content-Length` | `http/client.mbt` | 按 UTF-8 字节数计算；调用方自带的 `Content-Length` / `Transfer-Encoding` 被丢弃后重算 | 不发送请求侧 chunked |
+| `100 Continue` | `http/parser.mbt` | 解析响应时跳过除 `101` 外的全部 1xx，并计入 `interim` | 客户端**不主动发送** `Expect: 100-continue`，不会等待中间响应再写正文 |
+| `103 Early Hints` | `http/parser.mbt` | 同上，作为中间响应跳过 | 不读取中间响应的头内容 |
+| chunked 响应 | `http/parser.mbt` | 支持 chunk 扩展与 trailer | 不校验 trailer 字段语义 |
+| 无正文响应 | `http/parser.mbt` | `204` / `304` / `HEAD` 即使带 `Content-Length` 也不读正文 | — |
+| 头部续行 | `http/parser.mbt` | obs-fold 折叠为单行，名称按 ASCII 折叠大小写 | — |
+| TCP / TLS | `http/host_js.mbt` | 由宿主的 Node.js 内置 `net` / `tls` 提供字节管道，经 `process.execPath` 启动 | 每次请求一个连接（`Connection: close`），不复用 keep-alive |
+| 协议范围 | — | HTTP/1.1 | 不支持 HTTP/2、HTTP/3、代理、自动重定向与压缩内容解码 |
+
+这张表同时也是回归测试的检查清单：协议解析与请求渲染的每一行“当前行为”都有既有用例
+覆盖，宿主字节管道由 `js` 后端的真实网络用例覆盖，`tests/regression/` 再从 CLI
+视角复验其中五条。
+
 ### 5.3 `.probe` 用例格式
 
 ```text
@@ -488,7 +511,9 @@ fragment 保留但不发送、`@deploy.json` 按字节发送。它们从 `.probe
 驱动到断言结果，任何一条行为回退都会让 `moon test --target wasm-gc` 与 CI 失败。
 
 本阶段验收状态：`moon test --target wasm-gc` 共 352 个用例全部通过；`wasm-gc` 与
-`js` 两个后端 `moon check --deny-warn` 零错误、零告警。
+`js` 两个后端 `moon check --deny-warn` 零错误、零告警。本阶段成果对应版本
+**0.2.0**，基线为 `0.1.0`（提交 `932cea7`），逐项变更与升级说明见
+[CHANGELOG.md](CHANGELOG.md)。
 
 ---
 
