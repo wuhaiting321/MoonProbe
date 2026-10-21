@@ -61,7 +61,8 @@ test "check_json_path reports a mismatching value" {
   let body = "{\"code\":7}"
   match @assert.check_json_path(body, "code", "0") {
     Ok(_) => fail("expected a mismatch")
-    Err(msg) => @test.assert_eq(msg, "json: code: expected \"0\", got \"7\"")
+    Err(msg) =>
+      @test.assert_eq(msg, "json: \"code\": expected Int 0, got Int 7")
   }
 }
 

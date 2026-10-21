@@ -706,11 +706,7 @@ fn parse_expect(
           }
         }
         "json" => {
-          let (pairs, ni) = parse_pairs(lines, i + 1, line.indent)
-          let chk : Array[JsonCheck] = []
-          for p in pairs {
-            chk.push({ path: p.key, expected: p.value, })
-          }
+          let (chk, ni) = parse_json_checks(lines, i + 1, line.indent)
           checks = chk
           i = ni
           continue
@@ -1206,6 +1202,37 @@ fn parse_set_target(name : String, target : String) -> Result[SetSpec, String] {
     )
   }
   return Ok({ name, source, path, })
+}
+
+///|
+/// Collect the `json:` expectations that are direct children of the block
+/// header at `sub_parent_indent`.
+///
+/// The quoted flag of each value is carried into the AST so that the assertion
+/// engine can tell `code: 7` (a number) from `code: "7"` (a string). A missing
+/// value is recorded as the empty string, which no JSON scalar can equal.
+fn parse_json_checks(
+  lines : Array[LexedLine],
+  start : Int,
+  sub_parent_indent : Int,
+) -> (Array[JsonCheck], Int) {
+  let out : Array[JsonCheck] = []
+  let item_indent = child_indent_of(lines, start, sub_parent_indent)
+  let mut i = start
+  while i < lines.length() {
+    let line = lines[i]
+    if line.indent <= sub_parent_indent {
+      break
+    }
+    if line.indent == item_indent {
+      let expected = line.value.unwrap_or("")
+      out.push({ path: line.key, expected, expected_quoted: line.quoted, })
+      i = i + 1
+    } else {
+      i = i + 1
+    }
+  }
+  return (out, i)
 }
 
 ///|

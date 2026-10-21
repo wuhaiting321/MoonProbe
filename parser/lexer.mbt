@@ -23,6 +23,12 @@ pub struct LexedLine {
   /// Optional right-hand value (already unquoted), or `None` for a block
   /// header line such as `request:`.
   value : String?
+  /// Whether the raw value was written in quotes.
+  ///
+  /// The parser needs this to tell a string expectation from a literal one:
+  /// `json: code: "7"` asks for the string `"7"`, while `json: code: 7` asks
+  /// for the number `7`. Without the flag both reach the AST as the same text.
+  quoted : Bool
   /// 1-based source line number for diagnostics.
   line_no : Int
 }
@@ -48,11 +54,18 @@ pub fn lex(src : String) -> Result[Array[LexedLine], String] {
     let (ws_len, indent) = measure_indent(code)
     let rest = code.view(start_offset=ws_len).to_owned()
     match split_key_value(rest) {
-      Some((key, value)) => out.push({ indent, key, value, line_no, })
+      Some((key, value, quoted)) =>
+        out.push({ indent, key, value, quoted, line_no, })
       None =>
         match split_comparison(rest) {
           Some((key, value)) =>
-            out.push({ indent, key, value: Some(value), line_no, })
+            out.push({
+              indent,
+              key,
+              value: Some(value),
+              quoted: false,
+              line_no,
+            })
           None =>
             return Err("line \{line_no}: expected \"key:\", got \"\{rest}\"")
         }
@@ -134,9 +147,10 @@ fn measure_indent(line : String) -> (Int, Int) {
 }
 
 ///|
-/// Split `line` at the first `:` (outside of quotes) into `(key, value)`.
-/// The value is `None` if nothing meaningful follows the colon.
-fn split_key_value(line : String) -> (String, String?)? {
+/// Split `line` at the first `:` (outside of quotes) into `(key, value, quoted)`.
+/// The value is `None` if nothing meaningful follows the colon; `quoted` says
+/// whether the value was written as a quoted string.
+fn split_key_value(line : String) -> (String, String?, Bool)? {
   let n = line.length()
   let mut i = 0
   let mut single = false
@@ -153,14 +167,26 @@ fn split_key_value(line : String) -> (String, String?)? {
       let raw_value = line.view(start_offset=i + 1).to_owned()
       let value = trim(raw_value)
       if value.length() == 0 {
-        return Some((key, None))
+        return Some((key, None, false))
       }
-      return Some((key, Some(unquote(value))))
+      return Some((key, Some(unquote(value)), is_quoted_value(value)))
     }
     i = i + 1
   }
   // No `:` found: not a well-formed key line.
   return None
+}
+
+///|
+/// Whether an already-trimmed value is surrounded by a matching pair of quotes.
+fn is_quoted_value(value : String) -> Bool {
+  let n = value.length()
+  if n < 2 {
+    return false
+  }
+  let first = value.at(0).to_int()
+  let last = value.at(n - 1).to_int()
+  return (first == 0x22 && last == 0x22) || (first == 0x27 && last == 0x27)
 }
 
 ///|

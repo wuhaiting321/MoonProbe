@@ -120,19 +120,371 @@ pub fn read_json_path(body : String, path : String) -> Result[String, String] {
 ///|
 /// Compare one JSON field, addressed by a dotted path, against the text written
 /// in the `.probe` expectation.
+///
+/// The comparison is type-aware rather than textual, which is what stops the
+/// two classic false passes:
+///
+///   - the number `7` satisfying an expectation of the number `999` (numbers
+///     are compared by value, never by widening them to a common string), and
+///   - the string `"7"` satisfying an expectation of the number `7` (a quoted
+///     expectation only ever matches a JSON string).
+///
+/// Numbers are classified by integrality, the same rule `type:` uses: an
+/// integral value is an `Int`, anything with a fractional part is a `Number`.
+/// An integer expectation therefore requires an integral value, and a float
+/// expectation requires a non-integral one.
+pub fn check_json_path_typed(
+  body : String,
+  path : String,
+  expected : String,
+  quoted : Bool,
+) -> Result[Unit, String] {
+  let json = match decode_body(body) {
+    Ok(value) => value
+    Err(msg) => return Err("json: \{msg}")
+  }
+  return check_json_value(json, path, expected, quoted)
+}
+
+///|
+/// Compare one JSON field, treating the expectation as unquoted source text.
+///
+/// This is the entry point for callers that build an expectation in code; the
+/// runner goes through `check_json_path_typed` so that `code: "7"` and
+/// `code: 7` remain distinct.
 pub fn check_json_path(
   body : String,
   path : String,
   expected : String,
 ) -> Result[Unit, String] {
-  let actual = match read_json_path(body, path) {
-    Ok(text) => text
-    Err(msg) => return Err("json: \{msg}")
+  return check_json_path_typed(body, path, expected, false)
+}
+
+///|
+/// The literal an expectation denotes once its type is known.
+///
+/// The distinction between these five cases is the whole point of the strict
+/// mode: the text `7` is an `ExpectedInt` while the text `"7"` is an
+/// `ExpectedString`, and no comparison may collapse the two.
+priv enum ExpectedLiteral {
+  ExpectedInt(String)
+  ExpectedFloat(String)
+  ExpectedString(String)
+  ExpectedBool(Bool)
+  ExpectedNull
+}
+
+///|
+/// Whether `code` is an ASCII digit.
+fn is_digit_code(code : Int) -> Bool {
+  return code >= 0x30 && code <= 0x39
+}
+
+///|
+/// Classify an expectation into the JSON type it denotes.
+///
+/// A quoted expectation is always a string, whatever its text looks like. An
+/// unquoted one is a number, `true`, `false` or `null` when it is written as
+/// one, and otherwise a plain string — so the long-standing `name: alice`
+/// spelling keeps meaning the string `alice`.
+fn classify_expected(text : String, quoted : Bool) -> ExpectedLiteral {
+  if quoted {
+    return ExpectedString(text)
   }
-  if actual == expected {
-    return Ok(())
+  if text == "true" {
+    return ExpectedBool(true)
   }
-  return Err("json: \{path}: expected \"\{expected}\", got \"\{actual}\"")
+  if text == "false" {
+    return ExpectedBool(false)
+  }
+  if text == "null" {
+    return ExpectedNull
+  }
+  match number_literal_kind(text) {
+    Some(_) =>
+      // A literal is an `Int` or a `Number` by the value it denotes, not by how
+      // it is spelled: `7.0` and `1e3` are both integral values, so they are
+      // typed exactly like `7` and `1000`. This keeps `json:` and `type:`
+      // agreeing on the same rule — a number's type comes from its value.
+      if number_is_integral(text) {
+        ExpectedInt(text)
+      } else {
+        ExpectedFloat(text)
+      }
+    None => ExpectedString(text)
+  }
+}
+
+///|
+/// Whether a JSON number literal denotes an integral value.
+///
+/// The canonical form carries this directly: the exponent counts how many
+/// digits sit to the right of the significant ones, so an exponent of zero or
+/// more means no fractional part survives. `1000.0` canonicalises to `1e3` and
+/// is integral; `1.5` canonicalises to `15e-1` and is not.
+fn number_is_integral(text : String) -> Bool {
+  let canonical = match canonical_number(text) {
+    Some(value) => value
+    None => return false
+  }
+  let n = canonical.length()
+  let mut i = 0
+  while i < n {
+    if canonical.at(i).to_int() == 0x65 {
+      return !(i + 1 < n && canonical.at(i + 1).to_int() == 0x2d)
+    }
+    i = i + 1
+  }
+  return true
+}
+
+///|
+/// Classify a JSON number literal.
+///
+/// Returns `Some(true)` for a literal with a fractional or exponent part,
+/// `Some(false)` for a plain integer, and `None` when the text is not a JSON
+/// number at all. The grammar is the JSON one: an optional minus, at least one
+/// integer digit, an optional fraction, and an optional exponent.
+fn number_literal_kind(text : String) -> Bool? {
+  let n = text.length()
+  if n == 0 {
+    return None
+  }
+  let mut i = 0
+  if text.at(0).to_int() == 0x2d {
+    i = 1
+  }
+  let digits_start = i
+  while i < n && is_digit_code(text.at(i).to_int()) {
+    i = i + 1
+  }
+  if i == digits_start {
+    return None
+  }
+  let mut is_float = false
+  if i < n && text.at(i).to_int() == 0x2e {
+    is_float = true
+    i = i + 1
+    let fraction_start = i
+    while i < n && is_digit_code(text.at(i).to_int()) {
+      i = i + 1
+    }
+    if i == fraction_start {
+      return None
+    }
+  }
+  if i < n && (text.at(i).to_int() == 0x65 || text.at(i).to_int() == 0x45) {
+    is_float = true
+    i = i + 1
+    if i < n && (text.at(i).to_int() == 0x2b || text.at(i).to_int() == 0x2d) {
+      i = i + 1
+    }
+    let exponent_start = i
+    while i < n && is_digit_code(text.at(i).to_int()) {
+      i = i + 1
+    }
+    if i == exponent_start {
+      return None
+    }
+  }
+  if i != n {
+    return None
+  }
+  return Some(is_float)
+}
+
+///|
+/// Reduce a JSON number literal to a canonical `significant-digits e exponent`
+/// form, so that two literals compare equal when they denote the same value.
+///
+/// This is why `1e3`, `1000` and `1000.0` all agree while `999` and `7` do
+/// not, and why the comparison never goes through `Double` — a 19-digit integer
+/// keeps every digit instead of rounding to the nearest float.
+fn canonical_number(text : String) -> String? {
+  match number_literal_kind(text) {
+    None => return None
+    Some(_) => ()
+  }
+  let n = text.length()
+  let mut i = 0
+  let negative = text.at(0).to_int() == 0x2d
+  if negative {
+    i = 1
+  }
+  let digits = StringBuilder()
+  while i < n && is_digit_code(text.at(i).to_int()) {
+    digits.write_char(text.at(i).to_int().to_char().unwrap())
+    i = i + 1
+  }
+  let mut fraction_len = 0
+  if i < n && text.at(i).to_int() == 0x2e {
+    i = i + 1
+    while i < n && is_digit_code(text.at(i).to_int()) {
+      digits.write_char(text.at(i).to_int().to_char().unwrap())
+      fraction_len = fraction_len + 1
+      i = i + 1
+    }
+  }
+  let mut exponent = 0
+  if i < n {
+    // The grammar check above leaves only `e`/`E` at this position.
+    i = i + 1
+    let mut exponent_negative = false
+    if i < n && (text.at(i).to_int() == 0x2b || text.at(i).to_int() == 0x2d) {
+      exponent_negative = text.at(i).to_int() == 0x2d
+      i = i + 1
+    }
+    let mut magnitude = 0
+    while i < n && is_digit_code(text.at(i).to_int()) {
+      magnitude = magnitude * 10 + (text.at(i).to_int() - 0x30)
+      i = i + 1
+    }
+    exponent = if exponent_negative { -magnitude } else { magnitude }
+  }
+  let raw = digits.to_string()
+  let mut start = 0
+  while start < raw.length() && raw.at(start).to_int() == 0x30 {
+    start = start + 1
+  }
+  if start == raw.length() {
+    // Zero ignores its sign and its exponent.
+    return Some("0")
+  }
+  let mut end = raw.length()
+  while end > start && raw.at(end - 1).to_int() == 0x30 {
+    end = end - 1
+    exponent = exponent + 1
+  }
+  exponent = exponent - fraction_len
+  let significant = raw.view(start_offset=start, end_offset=end).to_owned()
+  let sign = if negative { "-" } else { "" }
+  return Some("\{sign}\{significant}e\{exponent}")
+}
+
+///|
+/// Whether a decoded number equals an expected numeric literal exactly.
+fn number_matches(
+  actual_repr : String?,
+  actual : Double,
+  expected : String,
+) -> Bool {
+  let actual_text = match actual_repr {
+    Some(text) => text
+    None => actual.to_string()
+  }
+  match (canonical_number(actual_text), canonical_number(expected)) {
+    (Some(left), Some(right)) => left == right
+    _ => false
+  }
+}
+
+///|
+/// Render a decoded scalar as the text a failure message shows.
+fn render_scalar(json : Json) -> String {
+  match json {
+    Null => "null"
+    True => "true"
+    False => "false"
+    String(s) => "\"" + s + "\""
+    Number(n, repr~) =>
+      match repr {
+        Some(text) => text
+        None => n.to_string()
+      }
+    Array(_) => "array"
+    Object(_) => "object"
+  }
+}
+
+///|
+/// The type name and rendered text of an expected literal.
+fn expected_render(literal : ExpectedLiteral) -> (String, String) {
+  match literal {
+    ExpectedInt(raw) => ("Int", raw)
+    ExpectedFloat(raw) => ("Number", raw)
+    ExpectedString(text) => ("String", "\"" + text + "\"")
+    ExpectedBool(value) => ("Bool", if value { "true" } else { "false" })
+    ExpectedNull => ("Null", "null")
+  }
+}
+
+///|
+/// The failure message for any mismatch, naming both types.
+fn mismatch_message(
+  path : String,
+  literal : ExpectedLiteral,
+  actual : Json,
+) -> String {
+  let (expected_type, expected_text) = expected_render(literal)
+  return "json: \{label_of(path)}: expected \{expected_type} \{expected_text}, got \{type_name(actual)} \{render_scalar(actual)}"
+}
+
+///|
+/// Compare an already decoded value against a typed expectation.
+fn check_json_value(
+  json : Json,
+  path : String,
+  expected : String,
+  quoted : Bool,
+) -> Result[Unit, String] {
+  let value = match lookup_path(json, path) {
+    Some(v) => v
+    None => return Err("json: path \"\{path}\" not found in the response body")
+  }
+  let literal = classify_expected(expected, quoted)
+  match value {
+    Number(n, repr~) => {
+      let integral = is_integral(n)
+      match literal {
+        ExpectedInt(raw) => {
+          if !integral {
+            return Err(mismatch_message(path, literal, value))
+          }
+          if number_matches(repr, n, raw) {
+            return Ok(())
+          }
+          return Err(mismatch_message(path, literal, value))
+        }
+        ExpectedFloat(raw) => {
+          if integral {
+            return Err(mismatch_message(path, literal, value))
+          }
+          if number_matches(repr, n, raw) {
+            return Ok(())
+          }
+          return Err(mismatch_message(path, literal, value))
+        }
+        _ => return Err(mismatch_message(path, literal, value))
+      }
+    }
+    String(s) =>
+      match literal {
+        ExpectedString(raw) => {
+          if s == raw {
+            return Ok(())
+          }
+          return Err(mismatch_message(path, literal, value))
+        }
+        _ => Err(mismatch_message(path, literal, value))
+      }
+    True =>
+      match literal {
+        ExpectedBool(true) => Ok(())
+        _ => Err(mismatch_message(path, literal, value))
+      }
+    False =>
+      match literal {
+        ExpectedBool(false) => Ok(())
+        _ => Err(mismatch_message(path, literal, value))
+      }
+    Null =>
+      match literal {
+        ExpectedNull => Ok(())
+        _ => Err(mismatch_message(path, literal, value))
+      }
+    _ =>
+      Err("json: path \"\{path}\" is not a scalar value and cannot be compared")
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -539,7 +891,13 @@ pub fn check_expect(
     None => ()
   }
   for check in expect.checks {
-    match check_json_path(body, check.path, check.expected) {
+    match
+      check_json_path_typed(
+        body,
+        check.path,
+        check.expected,
+        check.expected_quoted,
+      ) {
       Err(msg) => failures.push(msg)
       Ok(_) => ()
     }

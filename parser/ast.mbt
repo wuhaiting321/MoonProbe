@@ -33,6 +33,12 @@ pub struct Request {
 pub struct JsonCheck {
   path : String
   expected : String
+  /// Whether the expectation was written in quotes.
+  ///
+  /// This is what makes the comparison type-aware rather than textual:
+  /// `code: 7` expects a JSON number, `code: "7"` expects a JSON string. The
+  /// assertion engine refuses to treat one as the other.
+  expected_quoted : Bool
 }
 
 ///|
