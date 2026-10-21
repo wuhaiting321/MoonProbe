@@ -6,9 +6,10 @@
 ///
 /// Everything that decides *what* to send lives in this file and is free of
 /// platform FFI, so it stays testable on every backend. `send` — the one
-/// function that actually touches the network — is implemented per target in
-/// `http_js.mbt` and `http_stub.mbt`, and exchanges `(status, body)` primitives
-/// so that no transport type leaks into the shared code.
+/// function that actually touches the network — forwards to the `http` package,
+/// which owns both the protocol and the socket, and exchanges
+/// `(status, headers, body)` primitives so that no transport type leaks into the
+/// shared code.
 ///
 /// A request may reference variables bound by earlier cases: `{{token}}` inside
 /// a URL, header value, query value or body is replaced with the value the
@@ -740,8 +741,8 @@ fn strip_cr(line : String) -> String {
 }
 
 ///|
-/// Split a raw reply that leads with its headers — what `curl -i` produces —
-/// into the header list and the body.
+/// Split a raw reply that leads with its headers into the header list and the
+/// body.
 ///
 /// The first line is the status line, which the transport reports separately, so
 /// it is dropped here. Header folding (a continued line starting with a space)

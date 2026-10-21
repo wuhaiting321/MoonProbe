@@ -5,6 +5,7 @@
 import {
   "wuhaiting321/moonprobe/parser",
   "wuhaiting321/moonprobe/assert",
+  "wuhaiting321/moonprobe/http",
   "moonbitlang/core/env",
 }
 

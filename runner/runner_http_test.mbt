@@ -2,7 +2,8 @@
 /// MoonProbe - runner transport tests
 ///
 /// These exercise a real network round trip, so they only run on the `js`
-/// target, where the host provides `curl` through Node.js `child_process`.
+/// target, where the host provides a TCP byte pipe through Node.js `net` /
+/// `tls` (no external executable involved).
 
 ///|
 /// The first case and its suite config, ready to be handed to the runner.

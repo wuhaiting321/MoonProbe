@@ -1,0 +1,14 @@
+// The `http` package owns the HTTP/1.1 protocol: URL parsing, request
+// serialization, response parsing and stream framing. It never opens a socket
+// itself -- the host provides a byte pipe (see `host_js.mbt`), and everything
+// that decides what bytes mean lives here, so the whole stack is testable on
+// `wasm-gc` with scripted byte streams.
+
+import {
+  "moonbitlang/core/encoding/utf8",
+}
+
+import {
+  "moonbitlang/core/test",
+  "moonbitlang/core/encoding/utf8",
+} for "test"
