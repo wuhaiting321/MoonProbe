@@ -1,0 +1,13 @@
+// End-to-end regression suite for the failures of the September review.
+//
+// Every case drives the whole pipeline -- `.probe` source, request resolution
+// and rendering, raw HTTP/1.1 bytes, response parsing, assertions -- so a
+// behaviour regression is caught here, not by a user.
+
+import {
+  "wuhaiting321/moonprobe/parser",
+  "wuhaiting321/moonprobe/http",
+  "wuhaiting321/moonprobe/runner",
+  "moonbitlang/core/test",
+  "moonbitlang/core/encoding/utf8",
+} for "test"

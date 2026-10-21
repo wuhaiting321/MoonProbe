@@ -59,6 +59,9 @@ jobs:
       - name: Run the unit tests on the wasm-gc target
         run: moon test --target wasm-gc
 
+      - name: Run the acceptance regression suite
+        run: moon test --target wasm-gc -p wuhaiting321/moonprobe/tests/regression
+
       - name: Build the whole module on the wasm-gc target
         run: moon build --target wasm-gc
 
