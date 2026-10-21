@@ -8,8 +8,7 @@ test and extend MoonProbe.
 | Tool | Version used by the project | Notes |
 | --- | --- | --- |
 | MoonBit toolchain (`moon`) | `0.1.20260915` | Install from <https://www.moonbitlang.cn/download> |
-| Node.js | `v24` | Only needed to run the CLI / real HTTP requests (`js` target) |
-| `curl` | 8.x | The `js` transport shells out to it; it ships with Windows and most Linux images |
+| Node.js | `v24` (>= 18) | Only needed to run the CLI / real HTTP requests (`js` target); its built-in `net` / `tls` modules are the socket pipe, no external executable is used |
 
 ## Getting started
 
@@ -37,7 +36,8 @@ moon test  --target js
 moon run cli --target js -- examples/auth_chain.probe
 ```
 
-CI runs exactly `moon check --target wasm-gc`, `moon test --target wasm-gc` and
+CI runs exactly `moon check --target wasm-gc`, `moon test --target wasm-gc`,
+`moon test --target wasm-gc -p wuhaiting321/moonprobe/tests/regression` and
 `moon build --target wasm-gc`, so a change that passes locally on `wasm-gc`
 passes in CI too.
 
@@ -46,10 +46,12 @@ passes in CI too.
 | Package | Responsibility |
 | --- | --- |
 | `parser` | `.probe` lexer, AST and parser |
-| `runner` | request resolution (`{{var}}` interpolation), HTTP transport, suite execution |
-| `assert` | status code and JSON body assertions |
+| `runner` | request resolution (`{{var}}` interpolation), suite execution, hooks and retries |
+| `http` | self-contained HTTP/1.1 protocol stack: URL, request rendering, response framing, host byte pipe |
+| `assert` | status code and typed JSON body assertions |
 | `reporter` | console report and JUnit XML generation |
 | `cli` | command line entry point, file system FFI |
+| `tests/regression` | end-to-end cases guarding the acceptance review failures |
 | `examples` | runnable `.probe` suites |
 
 ## Coding conventions

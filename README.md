@@ -21,8 +21,8 @@
 | 项目方向 | MoonBit 开发者工具 / API 测试基础设施 |
 | 是否为移植项目 | 否，原创项目 |
 | 模块名 | `wuhaiting321/moonprobe`（遵循 mooncakes.io 的 `<author>/<module>` 命名规范） |
-| 代码规模 | 4030 行 MoonBit 源码 + 4468 行测试代码，16 个 `.mbt` 文件，合计 8498 行 |
-| 测试状态 | `moon test --target wasm-gc` 全部通过（237 个用例，0 失败）；`js` 后端在此基础上另含 9 个真实网络用例 |
+| 代码规模 | 5318 行 MoonBit 源码 + 5390 行测试代码，28 个 `.mbt` 文件，合计 10708 行 |
+| 测试状态 | `moon test --target wasm-gc` 全部通过（352 个用例，0 失败，含 5 个验收回归用例）；`js` 后端在此基础上另含 9 个真实网络用例 |
 | 构建状态 | `wasm-gc` 与 `js` 后端 `moon check` 零错误、零告警 |
 | 开源许可证 | Apache-2.0 |
 
@@ -67,8 +67,17 @@ MoonProbe 用于补齐这块空白：一个纯 MoonBit 实现的声明式 API �
   `${ENV_VAR:-默认值}` 给出兜底值；环境变量未设置又没有默认值时直接报错中止，
   避免把空串悄悄发出去。两种写法可在同一段文本中混用。
 - **状态码断言**：对响应状态码做精确匹配。
-- **JSON 响应体断言**：用点号路径校验嵌套字段（如 `args.page`、`data.user.id`）；
-  单个用例内的断言**不短路**，一次运行报出全部偏差。
+- **JSON 响应体断言（严格数值模式）**：用点号路径校验嵌套字段（如 `args.page`、
+  `data.user.id`）。比较是**类型感知**的：数字按值精确比较（十进制规范化，19 位整数
+  不丢精度），`999` 永远不会被 `7` 满足；`7` 与 `"7"`、`true` 与 `1` 分属不同类型，
+  互不通过；`7.0` / `1e3` 这类写法按其数值是否为整数归入 `Int`，与 `type:` 的判定
+  规则完全一致。单个用例内的断言**不短路**，一次运行报出全部偏差。
+- **HTTP 协议合规性**：`http/` 包是一套自研的 HTTP/1.1 协议栈，不依赖任何外部
+  可执行文件。请求侧保留 URL fragment 但不写进请求行，按 UTF-8 字节数计算
+  `Content-Length`，请求体按原始字节发送（不会被重新解释为文件路径）；响应侧完整
+  支持 chunked（含扩展与 trailer）、`Content-Length` 与 EOF 三种分帧，跳过
+  `100 Continue` / `103 Early Hints` 等中间响应，`204` / `304` / `HEAD` 按规范不读
+  响应体，并兼容 obs-fold 续行。上述规则均可在 `wasm-gc` 上以脚本化字节流验证。
 - **多族断言**：除状态码与 JSON 路径外，还支持
   `contains` / `contains_ci`（原始响应文本必须包含的子串，后者忽略大小写）、
   `length`（JSON 数组长度）、`type`（JSON 类型，区分 `int` 与 `number`）、
@@ -97,10 +106,9 @@ MoonProbe 用于补齐这块空白：一个纯 MoonBit 实现的声明式 API �
   供 CI 流水线展示每个用例的执行结果。
 - **命令行入口**：接收 `.probe` 文件路径一键运行整个测试集，
   支持 `--junit <path>` 指定报告输出路径。
-- **错误诊断**：解析阶段对缺失 URL、未知键、非法状态码、非法缩进、非法配置块、
-  非法的 `set` 取值来源等显式报错并给出行号；运行阶段对未定义的环境变量、
-  未闭合的占位符、无法解析的相对 URL 同样给出可操作的错误信息，
-  避免拼写错误被静默忽略。
+- **验收回归套件**：`tests/regression/` 针对 9 月验收暴露的失败点各设一条端到端用例，
+  从 `.probe` 源文件一路跑到断言结果，随 `moon test` 与 CI 一起执行，防止已修复的
+  问题重新出现。
 
 ---
 
@@ -111,7 +119,7 @@ MoonProbe 用于补齐这块空白：一个纯 MoonBit 实现的声明式 API �
 | 依赖 | 版本要求 | 说明 |
 | --- | --- | --- |
 | MoonBit 工具链 | `moonc` ≥ 0.10.14 | 项目以 MoonBit 为主要实现语言；CI 每次都安装官方发布的最新工具链进行验证 |
-| Node.js | 运行 `.probe` 用例时需要 | CLI 在 `js` 后端通过 Node.js 调用宿主机 `curl`；`moon check` / `moon test` 不需要 |
+| Node.js | ≥ 18，运行 `.probe` 用例时需要 | `js` 后端用 Node.js 内置的 `net` / `tls` 作为字节管道（经 `process.execPath` 启动子进程），不调用 `curl` 等任何外部命令；`moon check` / `moon test` 不需要 |
 | 网络 | 运行会访问真实站点的用例时需要 | 单元测试完全离线，不受网络影响 |
 
 安装 MoonBit 工具链（Linux / macOS）：
@@ -171,42 +179,69 @@ moon add wuhaiting321/moonprobe
 
 | 包 | 职责 | 源码规模 |
 | --- | --- | --- |
-| `parser/` | 词法分析、AST 定义、`.probe` 文件解析（含 `config:` 块） | 1835 行 |
-| `runner/` | 配置合并、占位符插值、HTTP 传输、变量提取与用例编排 | 1244 行 |
-| `assert/` | 状态码、JSON 路径、文本、长度、类型、schema、耗时断言 | 598 行 |
-| `reporter/` | 控制台报告输出、JUnit XML 报告生成 | 164 行 |
-| `cli/` | 命令行入口、宿主文件读写 FFI | 189 行 |
+| `parser/` | 词法分析、AST 定义、`.probe` 文件解析（含 `config:` 块） | 1833 行 |
+| `runner/` | 配置合并、占位符插值、重试与钩子编排、变量提取 | 1101 行 |
+| `http/` | 自研 HTTP/1.1 协议栈：URL、请求渲染、响应分帧、宿主机字节管道 | 1137 行 |
+| `assert/` | 状态码、严格 JSON 数值、文本、长度、类型、schema、耗时断言 | 912 行 |
+| `reporter/` | 控制台报告输出、JUnit XML 报告生成 | 155 行 |
+| `cli/` | 命令行入口、宿主文件读写 FFI | 180 行 |
+| `tests/regression/` | 9 月验收失败点的端到端回归用例（仅测试） | 211 行测试 |
 
-依赖方向单向：`cli → reporter → runner → assert → parser`，不存在环。
-上表为源码文件的总行数（合计 4030 行），另有 4468 行测试代码，总计 8498 行；
-验收脚本 `check_验收.sh` / `check_验收.ps1` 按「非空行」口径统计为 3868 行（要求 > 1500）。
+依赖方向单向：`cli → reporter → runner → assert / http → parser`，不存在环。
+`http` 与 `assert` 互不依赖；`runner` 只把两者串起来，因此断言引擎和协议栈都能单独
+在 `wasm-gc` 上测试。上表为源码文件的总行数（合计 5318 行），另有 5390 行测试代码，
+总计 10708 行；验收脚本 `check_验收.sh` / `check_验收.ps1` 按「非空行」口径统计为
+5318 行（要求 > 1500）。
 
 ### 5.2 核心技术实现
 
-1. **纯 MoonBit 实现，零第三方依赖。** 解析器、执行器、断言引擎、报告生成与 CLI
-   全部由 MoonBit 编写，仅依赖官方标准库 `moonbitlang/core`。
-   只有"发起网络请求 / 读写文件"这类宿主能力通过 `extern "js"` 桥接，
-   边界收敛在 5 个函数内。
-2. **解析器（`parser`）。** 手写词法分析器处理缩进、引号与注释——注释在分行后
-   立即被剥离（引号内的 `#` 与紧贴文本的 `#` 豁免），所以注释可以出现在任意
-   位置，且不会干扰每一行的缩进判定；
-   递归下降解析器产出 AST（`Config` / `Request` / `Expect` / `JsonCheck` /
-   `SetSpec` / `LengthCheck` / `TypeCheck` / `SchemaField`），
-   对未声明的键、越界的嵌套与格式错误的取值显式报错并给出行号。
+1. **纯 MoonBit 实现，零第三方依赖。** 解析器、执行器、HTTP 协议栈、断言引擎、
+   报告生成与 CLI 全部由 MoonBit 编写，仅依赖官方标准库 `moonbitlang/core`。
+   留给宿主的只有两类能力：读写成 `.probe` / 报告文件（`cli/file_js.mbt`），
+   以及一条 TCP / TLS 字节管道（`http/host_js.mbt`）。后者只用 Node.js 内置的
+   `net`、`tls` 模块，经 `process.execPath` 启动，**不查找也不调用任何外部可执行文件**，
+   因此在 macOS、Linux 与 Windows 上行为一致。
+2. **解析器与错误诊断（`parser`）。** 手写词法分析器处理缩进、引号与注释——注释在
+   分行后立即被剥离（引号内的 `#` 与紧贴文本的 `#` 豁免），所以注释可以出现在任意
+   位置，且不会干扰每一行的缩进判定；递归下降解析器产出 AST（`Config` / `Request` /
+   `Expect` / `JsonCheck` / `SetSpec` / `LengthCheck` / `TypeCheck` / `SchemaField`）。
    `config:` 块被限定在文件的首个用例之前且只允许出现一次——全局默认值一旦被
    解析，后续用例就只会读它读过的那一份。
-3. **运行器与 HTTP 传输（`runner`）。** 基于 MoonBit 的 JavaScript 后端，
-   通过 `extern "js"` 调用宿主机的 `curl.exe` 同步发送请求，支持请求方法、头部、
-   查询参数、请求体与超时控制；`curl -i` 让响应头一并回传，供 `set:` 从
-   Header / Cookie 取值。平台无关的"决定发什么"逻辑与真正触碰网络的 `send`
-   分离：`js` 后端走 Node.js + `curl`，其他后端返回明确错误而不是静默失败。
-4. **断言引擎（`assert`）。** 状态码精确匹配；JSON 断言基于标准库 `moonbitlang/core/json`
-   解析响应体，按点号路径逐级下钻，支持任意深度嵌套字段，并在失败消息中同时给出
-   期望值与实际值。此外提供五族进阶断言：原始文本包含（`contains` / `contains_ci`）、
-   数组长度（`length`）、JSON 类型（`type`，按数值整性区分 `int` 与 `number`）、
-   对象结构（`schema`，字段类型 + `!` 必需标记 + 嵌套对象）、
-   耗时预算（`duration_ms`）。一个用例内的全部断言共享同一份响应，逐条判定、
-   互不短路。
+   **错误诊断是解析器的技术细节，而不是独立的产品功能**：缺失 URL、未知键、非法状态码、
+   非法缩进、非法配置块、非法的 `set` 取值来源都会显式报错并给出行号；运行阶段对
+   未定义的环境变量、未闭合的占位符、无法解析的相对 URL 同样给出可操作的错误信息，
+   让拼写错误暴露在第一次运行里，而不是变成一个安静发错的请求。`json:` 期望值的
+   引号状态也在这里保留（`JsonCheck.expected_quoted`），使 `code: 7` 与 `code: "7"`
+   在下游可以走不同的比较路径。
+3. **自研 HTTP 栈（`http`）——从“调用工具”到“拥有协议”。** 旧实现把整个网络层
+   交给 `curl.exe`：请求由命令行参数拼装、响应由 `curl -i` 的文本回传，于是产生了一串
+   无法从外部修正的问题——`POST` 的 `100 Continue` 头块混进正文、URL fragment 被当作
+   查询串、以 `@` 开头的请求体被当成文件名、固定的 `curl.exe` 让 macOS / Linux 启动
+   即失败。现在协议由项目自己实现：
+   - `url.mbt` 按 RFC 3986 解析 scheme / host / IPv6 / port / path / query / fragment；
+     fragment 留在 `Url` 值里供用户回读，但 `request_target()` 只拼 `path?query`，
+     绝不把 fragment 写进请求行。
+   - `client.mbt` 渲染请求行与头部，`Host` 必填（IPv6 加方括号、默认端口省略），
+     `Content-Length` 按 **UTF-8 字节** 计算而不是 UTF-16 code unit 数，请求体原样
+     发送——`@handle` 就是 7 个字节，不会被重新解释。
+   - `parser.mbt` 解析响应：状态行 + 头部（obs-fold 续行、大小写折叠）+ 三种分帧
+     （chunked 含扩展与 trailer、`Content-Length`、连接关闭 EOF）；1xx 中间响应
+     （`100 Continue`、`103 Early Hints`）被跳过并单独计数，`101` 视为最终响应；
+     `204` / `304` / `HEAD` 即使带了 `Content-Length` 也不读响应体。
+   - `stream.mbt` 提供字节游标（按行、按长度、取剩余），所有解析都建立在这层之上，
+     因此协议栈可以在 `wasm-gc` 上被脚本化字节流完整驱动。
+   - `host_stub.mbt` 让没有 socket 的后端返回明确错误，而不是静默失败；
+     `host_js.mbt` 只负责把已渲染好的字节写进 socket 并读回原始字节（base64 穿越
+     字符串边界，二进制正文逐字节保真），HTTP 语义一律不越过这条边界。
+4. **断言引擎（`assert`）。** 状态码精确匹配；JSON 断言基于标准库
+   `moonbitlang/core/json` 解析响应体，按点号路径逐级下钻。数值比较采用**严格模式**：
+   期望值先按引号状态与字面量语法分类为 `Int` / `Number` / `String` / `Bool` / `Null`，
+   再与解码值按类型匹配；数字不做字符串拼接、也不经过 `Double`，而是归约为
+   「有效数字 + 指数」的十进制规范形式精确比较（`1e3` 与 `1000.0` 相等，
+   `999` 与 `7` 不等，19 位整数逐位保留）；`7.0`、`1e3` 这类数值为整数的写法与
+   `type:` 一样归为 `Int`。此外提供五族进阶断言：原始文本包含（`contains` /
+   `contains_ci`）、数组长度（`length`）、JSON 类型（`type`）、对象结构（`schema`）、
+   耗时预算（`duration_ms`）。一个用例内的全部断言共享同一份响应，逐条判定、互不短路。
 5. **报告器（`reporter`）。** 控制台报告带 ANSI 色彩并保留 `[PASS]` / `[FAIL]`
    文本标签，重定向到日志文件依然可读；JUnit XML 生成器完成 `&`、`<`、`>`、`"`、`'`
    五类字符的 XML 转义，输出的 `<testsuites>` / `<testsuite>` / `<testcase>` /
@@ -299,6 +334,24 @@ expect:
 > 文本的 `#` 也不算——`url: https://x/a#frag` 会保留 `#frag`。值本身要以 `#`
 > 开头时必须加引号，例如 `contains: "#tag"`。
 
+`json:` 的期望值是**有类型**的，加不加引号决定它要求字符串还是数字：
+
+```text
+expect:
+  json:
+    code: 999          # 要求数字 999，7、7.0 之外的一切数值都不通过
+    code: "999"        # 要求字符串 "999"，数字 999 不通过
+    ratio: 7.5         # 非整数：按十进制规范形式精确比较
+    ratio: 7.0         # 数值为整数，按 Int 比较，等价于 7
+    active: true       # Bool 只匹配 true / false，不匹配 1 / 0
+    extra: null        # Null 只匹配 JSON null
+    name: alice        # 未加引号且不是数字/布尔/null，按字符串 alice 比较
+```
+
+数值比较不经过 `Double`：`999` 与 `7` 按值不等，`1e3` 与 `1000.0` 按值相等，
+19 位整数逐位比较。失败消息会同时给出两边的类型与取值，例如
+`json: "code": expected Int 999, got Int 7`。
+
 `config:` 必须写在首个用例之前，且一个文件只允许出现一次。其中 `base_url`
 只对相对 URL 生效，写绝对 URL 的用例不受影响；`global_headers` 与用例自身
 `headers` 同名时以用例为准；超时优先级为「用例 `timeout:` > `global_timeout` >
@@ -334,6 +387,9 @@ expect:
 moon check --target wasm-gc
 moon test  --target wasm-gc
 
+# 只跑 9 月验收回归套件（它同样包含在上一条命令里）
+moon test --target wasm-gc -p wuhaiting321/moonprobe/tests/regression
+
 # 运行示例用例：CLI 必须显式指定 --target js
 moon run cli --target js -- examples/httpbin.probe
 
@@ -341,9 +397,16 @@ moon run cli --target js -- examples/httpbin.probe
 moon run cli --target js -- examples/auth_chain.probe --junit junit.xml
 ```
 
-> **运行 CLI 必须使用 `--target js`。** CLI 通过 `extern "js"` 调用宿主机 `curl`
-> 发起真实 HTTP 请求，并依赖 JS 宿主读写 `.probe` 用例文件与报告文件；
-> 用其他后端（如 `native`）运行会直接失败。模块的 `preferred_target` 也已设为 `js`。
+> **运行 CLI 必须使用 `--target js`。** CLI 依赖 JS 宿主读写 `.probe` 用例文件与报告
+> 文件，并通过 Node.js 内置的 `net` / `tls` 建立 TCP 连接（见 `http/host_js.mbt`）；
+> 用其他后端（如 `native`）运行会给出明确的“无网络传输”错误。模块的
+> `preferred_target` 也已设为 `js`。
+
+`tests/regression/` 的 5 条端到端用例对应 9 月验收的 5 个失败点：
+JSON 数值 `7` vs `999`、macOS / Linux 下无外部可执行文件的客户端启动、
+`POST` 的 `100 Continue` 正文分离、URL fragment 保留、`@` 请求体按字节发送。
+它们由 `moon test --target wasm-gc` 自动发现并执行，CI 中也单独列成一步，
+任一行为回退都会让流水线变红。
 
 以上检查已固化为验收脚本：`check_验收.sh`（Linux / macOS）与 `check_验收.ps1`（Windows）
 会依次执行代码规模统计、两个后端的 `moon check`、`moon build --target js`、
@@ -362,7 +425,8 @@ powershell -ExecutionPolicy Bypass -File .\check_验收.ps1   # Windows
 - 它们不会被 `moon test` 执行，也不进入 CI（CI 只跑 `wasm-gc` 后端的单元测试）；
 - 其中部分用例会真实访问外部站点（如 `httpbin.org`、`example.com`），
   运行结果取决于网络可达性，不适合作为构建门禁；
-- 项目的自动化测试位于各包的 `*_test.mbt` 文件，由 `moon test` 执行。
+- 项目的自动化测试位于各包的 `*_test.mbt` 文件与 `tests/regression/` 端到端套件，
+  由 `moon test` 执行。
 
 `examples/` 目前提供三个可直接运行的示例：`example_com.probe`（最小 GET）、
 `httpbin.probe`（查询参数 + JSON 嵌套字段断言）、`auth_chain.probe`（变量提取与串联）。
@@ -379,6 +443,52 @@ powershell -ExecutionPolicy Bypass -File .\check_验收.ps1   # Windows
 
 开发过程中使用 AI 编程助手辅助代码生成、测试补全与文档撰写；项目的技术路径、
 质量边界、验证方式与开源合规由作者负责，所有代码均经过本地编译与单元测试验证。
+
+---
+
+## 六、10 月黑客松新增工作
+
+本阶段没有把 9 月验收问题当作“改几行代码”来处理，而是把每一处缺陷都变成了架构升级：
+断言引擎获得类型系统，网络层从“调用外部工具”变成“自研协议栈”，核心功能重新定位，
+并把验收失败点固化成回归门禁。相对 9 月提交，净增约 2850 行代码（含测试）。
+
+| # | 实质工作 | 交付物 | 代码增量 |
+| --- | --- | --- | --- |
+| 1 | 断言引擎类型系统增强：JSON 数值严格比较 | `assert/assert.mbt` 重写 JSON 期望分类与十进制规范化比较；新增 `assert/json_numeric_test.mbt`（32 个数值 / 类型用例）；`parser` 保留 `json:` 期望值的引号状态 | +358 行源码，+249 行测试，解析器 +71/-12 |
+| 2 | 移除 curl，自研 HTTP/1.1 协议栈 | 新增 `http/` 包（`url.mbt`、`client.mbt`、`parser.mbt`、`stream.mbt`、`base64.mbt`、`host_js.mbt`、`host_stub.mbt`）与 `runner/transport.mbt`；删除 `runner/http_js.mbt`、`runner/http_stub.mbt` 中的 curl FFI | +1947 行（1137 源码 + 810 测试），删除 125 行 |
+| 3 | 核心功能重新定位：错误诊断降级，HTTP 协议合规性上位 | README「三、核心功能范围」重组：删除「错误诊断」独立条目并并入 5.2 解析器章节，新增「HTTP 协议合规性」 | 文档结构重构 |
+| 4 | 9 月验收回归套件 | 新增 `tests/regression/`：5 条端到端用例 + `moon.pkg`，接入 `moon test` 与 CI | +211 行测试 |
+
+**1. JSON 数值比较：从字符串比较到类型化精确比较。**
+旧逻辑把期望值和响应值都当成文本，数值的类型信息在比较前就已丢失，`999` 与 `7`
+这类差异只能靠字符串碰巧不相等来兜底，`7` / `"7"` / `7.0` 的语义也无从区分。
+新实现先把期望值分类为 `Int` / `Number` / `String` / `Bool` / `Null`——加引号就是字符串，
+未加引号的 JSON 字面量按其语法与**数值整性**归入整数或浮点；再与解码后的 JSON 值按
+类型匹配。数字比较把字面量归约为「有效数字 + 指数」的十进制规范形式，不经过
+`Double`，因此 `1e3`、`1000`、`1000.0` 相等，`999` 与 `7` 不等，19 位整数逐位保留。
+边界值 `0`、`-0`、`-1`、`1.5`、`1e-3`、`9007199254740993` 等均有测试覆盖。
+
+**2. 自研 HTTP 栈：网络层不再受制于工具行为。**
+旧实现的 `curl` 调用把协议决策交给了外部程序：`POST` 的 `100 Continue` 头块会混入正文，
+fragment 会挤进查询串，`@` 开头的正文会被当作文件名读取，固定的 `curl.exe` 让
+macOS / Linux 无法启动。新实现把 URL、请求渲染、响应分帧全部收进 `http/` 包：
+chunked 与 `Content-Length` / EOF 三种分帧、1xx 中间响应跳过与计数、`204` / `304` /
+`HEAD` 无正文、obs-fold 续行、UTF-8 字节级 `Content-Length`。宿主只保留一条
+TCP / TLS 字节管道，且只用 Node.js 内置模块，不查找任何外部可执行文件。
+
+**3. 核心功能重新定位。**
+「错误诊断」不再单列为核心功能，其内容作为解析器章节的技术细节保留；
+新的核心条目「HTTP 协议合规性」承载本阶段最重要的架构成果，与声明式用例、
+变量串联、多族断言等并列。
+
+**4. 验收回归套件。**
+`tests/regression/` 的 5 条用例分别锁定：`{"code":7}` 对 `code: 999` 必须失败、
+客户端不依赖平台可执行文件即可启动、`100 Continue` 头块不进入正文、
+fragment 保留但不发送、`@deploy.json` 按字节发送。它们从 `.probe` 源文件一路
+驱动到断言结果，任何一条行为回退都会让 `moon test --target wasm-gc` 与 CI 失败。
+
+本阶段验收状态：`moon test --target wasm-gc` 共 352 个用例全部通过；`wasm-gc` 与
+`js` 两个后端 `moon check --deny-warn` 零错误、零告警。
 
 ---
 
