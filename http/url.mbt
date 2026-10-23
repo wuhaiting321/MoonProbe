@@ -22,7 +22,7 @@ pub struct Url {
   /// Whether `host` came from `[ ... ]` and needs brackets when written back.
   ipv6 : Bool
   /// Effective port, with the scheme default already applied.
-  port : Int
+  port : Int32
   /// Request path, always starting with `/`.
   path : String
   /// Query string without the leading `?`.
@@ -33,7 +33,7 @@ pub struct Url {
 
 ///|
 /// The port a scheme uses when the URL does not name one.
-pub fn default_port(scheme : String) -> Int {
+pub fn default_port(scheme : String) -> Int32 {
   if scheme == "https" {
     return 443
   }
@@ -48,7 +48,7 @@ fn is_supported_scheme(scheme : String) -> Bool {
 
 ///|
 /// Find `needle` in `text` at or after `from`, returning its byte offset.
-fn find_sub(text : String, needle : String, from : Int) -> Int? {
+fn find_sub(text : String, needle : String, from : Int32) -> Int32? {
   let n = text.length()
   let m = needle.length()
   if m == 0 {
@@ -75,7 +75,7 @@ fn find_sub(text : String, needle : String, from : Int) -> Int? {
 
 ///|
 /// Parse a decimal port number.
-fn parse_port(text : String) -> Result[Int, String] {
+fn parse_port(text : String) -> Result[Int32, String] {
   if text.length() == 0 {
     return Err("empty port in url")
   }

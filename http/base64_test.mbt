@@ -6,7 +6,7 @@
 
 ///|
 test "decode a padded group" {
-  let bytes = match decode_base64("aGk=") {
+  let bytes = match @http.decode_base64("aGk=") {
     Ok(value) => value
     Err(msg) => fail("base64 should decode: \{msg}")
   }
@@ -15,7 +15,7 @@ test "decode a padded group" {
 
 ///|
 test "decode an unpadded group" {
-  let bytes = match decode_base64("aGk") {
+  let bytes = match @http.decode_base64("aGk") {
     Ok(value) => value
     Err(msg) => fail("base64 should decode: \{msg}")
   }
@@ -24,7 +24,7 @@ test "decode an unpadded group" {
 
 ///|
 test "decode every byte value of a small alphabet sample" {
-  let bytes = match decode_base64("AAECAwQ=") {
+  let bytes = match @http.decode_base64("AAECAwQ=") {
     Ok(value) => value
     Err(msg) => fail("base64 should decode: \{msg}")
   }
@@ -33,7 +33,7 @@ test "decode every byte value of a small alphabet sample" {
 
 ///|
 test "decode the empty string as empty bytes" {
-  let bytes = match decode_base64("") {
+  let bytes = match @http.decode_base64("") {
     Ok(value) => value
     Err(msg) => fail("base64 should decode: \{msg}")
   }
@@ -42,7 +42,7 @@ test "decode the empty string as empty bytes" {
 
 ///|
 test "decode a single padded character group" {
-  let bytes = match decode_base64("aA==") {
+  let bytes = match @http.decode_base64("aA==") {
     Ok(value) => value
     Err(msg) => fail("base64 should decode: \{msg}")
   }
@@ -51,7 +51,7 @@ test "decode a single padded character group" {
 
 ///|
 test "whitespace is rejected" {
-  match decode_base64("aG k=") {
+  match @http.decode_base64("aG k=") {
     Ok(_) => fail("whitespace must not decode")
     Err(msg) => @test.assert_eq(msg.has_prefix("invalid base64"), true)
   }
@@ -59,7 +59,7 @@ test "whitespace is rejected" {
 
 ///|
 test "a character outside the alphabet is rejected" {
-  match decode_base64("aGk*") {
+  match @http.decode_base64("aGk*") {
     Ok(_) => fail("a foreign character must not decode")
     Err(msg) => @test.assert_eq(msg.has_prefix("invalid base64"), true)
   }
@@ -67,7 +67,7 @@ test "a character outside the alphabet is rejected" {
 
 ///|
 test "data after padding is rejected" {
-  match decode_base64("aG=k") {
+  match @http.decode_base64("aG=k") {
     Ok(_) => fail("data after padding must not decode")
     Err(msg) => @test.assert_eq(msg, "invalid base64: data after padding")
   }
@@ -75,7 +75,7 @@ test "data after padding is rejected" {
 
 ///|
 test "too much padding is rejected" {
-  match decode_base64("a===") {
+  match @http.decode_base64("a===") {
     Ok(_) => fail("triple padding must not decode")
     Err(msg) => @test.assert_eq(msg, "invalid base64: too much padding")
   }
@@ -83,7 +83,7 @@ test "too much padding is rejected" {
 
 ///|
 test "a partial group is rejected" {
-  match decode_base64("a") {
+  match @http.decode_base64("a") {
     Ok(_) => fail("a one-character group must not decode")
     Err(msg) => @test.assert_eq(msg, "invalid base64: a partial group")
   }
@@ -92,7 +92,7 @@ test "a partial group is rejected" {
 ///|
 test "non-zero trailing bits are rejected" {
   // `aGl` differs from `aGk` only in the two bits that should be zero.
-  match decode_base64("aGl") {
+  match @http.decode_base64("aGl") {
     Ok(_) => fail("non-zero trailing bits must not decode")
     Err(msg) => @test.assert_eq(msg, "invalid base64: non-zero trailing bits")
   }
@@ -100,7 +100,7 @@ test "non-zero trailing bits are rejected" {
 
 ///|
 test "the url-safe alphabet is rejected" {
-  match decode_base64("aG-_") {
+  match @http.decode_base64("aG-_") {
     Ok(_) => fail("the url-safe alphabet is not this decoder's input")
     Err(msg) => @test.assert_eq(msg.has_prefix("invalid base64"), true)
   }

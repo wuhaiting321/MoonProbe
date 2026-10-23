@@ -33,8 +33,8 @@ fn regression_transport(
     url : String,
     headers : String,
     body : String,
-    _timeout_ms : Int,
-  ) -> Result[(Int, Array[(String, String)], String), String] {
+    _timeout_ms : Int32,
+  ) -> Result[(Int32, Array[(String, String)], String), String] {
     let payload = if body.length() == 0 { None } else { Some(body) }
     let exchange = fn(wire : String) -> Result[Bytes, String] {
       wires.push(wire)

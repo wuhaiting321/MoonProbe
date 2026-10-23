@@ -56,7 +56,7 @@ fn run_hook_step(
   step : @parser.Case,
   config : @parser.Config,
   context : Map[String, String],
-  timeout_ms : Int,
+  timeout_ms : Int32,
   role : String,
 ) -> Array[String] {
   let label = "\{role} \"\{step.name}\""
@@ -105,7 +105,7 @@ pub fn run_test(
   test_case : @parser.Case,
   config : @parser.Config,
   context : Map[String, String],
-  timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
+  timeout_ms~ : Int32 = DEFAULT_TIMEOUT_MS,
 ) -> Result[TestResult, String] {
   return run_case(send, test_case, config, context, [], [], timeout_ms)
 }
@@ -131,7 +131,7 @@ fn run_case(
   context : Map[String, String],
   suite_before : Array[@parser.Case],
   suite_after : Array[@parser.Case],
-  timeout_ms : Int,
+  timeout_ms : Int32,
 ) -> Result[TestResult, String] {
   let failures : Array[String] = []
   let mut blocked = false
@@ -219,7 +219,7 @@ fn run_case(
 /// `after_each` blocks surround every case.
 pub fn run_suite(
   suite : @parser.Suite,
-  timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
+  timeout_ms~ : Int32 = DEFAULT_TIMEOUT_MS,
 ) -> Result[Array[TestResult], String] {
   return run_suite_with(send, suite, timeout_ms~)
 }
@@ -236,7 +236,7 @@ pub fn run_suite(
 pub fn run_suite_with(
   transport : Transport,
   suite : @parser.Suite,
-  timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
+  timeout_ms~ : Int32 = DEFAULT_TIMEOUT_MS,
 ) -> Result[Array[TestResult], String] {
   let context = new_context()
   let results : Array[TestResult] = []

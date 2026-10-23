@@ -19,7 +19,7 @@
 /// A structured HTTP response.
 pub struct Response {
   /// The HTTP status code reported by the server.
-  status : Int
+  status : Int32
   /// The response headers, in the order the server sent them. Names are kept as
   /// the server spelled them; every lookup in this package folds ASCII case.
   headers : Array[(String, String)]
@@ -32,7 +32,7 @@ pub struct Response {
   finished_at_ms : UInt64
   /// How many transport calls were made to obtain this response: 1 when the
   /// first attempt was good enough, more when a retry was spent.
-  attempts : Int
+  attempts : Int32
 }
 
 ///|
@@ -54,7 +54,7 @@ pub fn new_context() -> Map[String, String] {
 
 ///|
 /// The default per-request timeout, in milliseconds.
-pub const DEFAULT_TIMEOUT_MS : Int = 5000
+pub const DEFAULT_TIMEOUT_MS : Int32 = 5000
 
 ///|
 /// The default retry budget: how many extra attempts a request gets.
@@ -64,7 +64,7 @@ pub const DEFAULT_TIMEOUT_MS : Int = 5000
 /// dropped, a single 502 — without letting a genuinely broken service quadruple
 /// the runtime of every run. A `.probe` file that wants a different trade-off
 /// declares it: `retry: 0` to fail fast, `retry: 3` for a flaky staging host.
-pub const DEFAULT_RETRY_COUNT : Int = 1
+pub const DEFAULT_RETRY_COUNT : Int32 = 1
 
 ///|
 /// Look an environment variable up in the real environment.
@@ -81,7 +81,7 @@ pub fn system_env(key : String) -> String? {
 /// Whether `code` may appear literally inside a URL query component.
 ///
 /// This is the RFC 3986 "unreserved" set: ALPHA / DIGIT / "-" / "." / "_" / "~".
-fn is_unreserved(code : Int) -> Bool {
+fn is_unreserved(code : Int32) -> Bool {
   (code >= 0x41 && code <= 0x5a) ||
   (code >= 0x61 && code <= 0x7a) ||
   (code >= 0x30 && code <= 0x39) ||
@@ -93,14 +93,14 @@ fn is_unreserved(code : Int) -> Bool {
 
 ///|
 /// The upper-case hexadecimal digit for a value in `0..=15`.
-fn hex_digit(value : Int) -> String {
+fn hex_digit(value : Int32) -> String {
   return "0123456789ABCDEF".get_char(value).unwrap().to_string()
 }
 
 ///|
 /// Encode a single UTF-8 byte as one URL component: the character itself when
 /// it belongs to the unreserved set, `%XX` otherwise.
-fn encode_byte(byte : Int) -> String {
+fn encode_byte(byte : Int32) -> String {
   if is_unreserved(byte) {
     return byte.to_char().unwrap().to_string()
   }
@@ -237,11 +237,11 @@ pub fn resolve_placeholders(
 
 ///|
 /// The opening brace shared by `{{name}}` and `${NAME}`.
-const OPEN_BRACE : Int = 0x7b
+const OPEN_BRACE : Int32 = 0x7b
 
 ///|
 /// The `$` that opens an environment reference.
-const DOLLAR : Int = 0x24
+const DOLLAR : Int32 = 0x24
 
 ///|
 /// Read the characters of `text` from `start` up to the next occurrence of
@@ -250,7 +250,11 @@ const DOLLAR : Int = 0x24
 /// Returns `None` when `closer` never appears, which is how an unterminated
 /// placeholder is detected. `closer` is one or two characters long, which is all
 /// the grammar needs.
-fn read_until(text : String, start : Int, closer : String) -> (String, Int)? {
+fn read_until(
+  text : String,
+  start : Int32,
+  closer : String,
+) -> (String, Int32)? {
   let width = closer.length()
   let first = closer.at(0).to_int()
   let buf = StringBuilder()
@@ -307,8 +311,8 @@ fn env_fallback_of(inner : String) -> String? {
 /// Naming the shape lets the retry loop accept the platform `send` on a real run
 /// and a scripted stand-in in a test, so the retry rules can be exercised on a
 /// backend that has no network at all.
-pub type Transport = (String, String, String, String, Int) -> Result[
-  (Int, Array[(String, String)], String),
+pub type Transport = (String, String, String, String, Int32) -> Result[
+  (Int32, Array[(String, String)], String),
   String,
 ]
 
@@ -321,7 +325,7 @@ pub type Transport = (String, String, String, String, Int) -> Result[
 /// and hide the real problem behind a second identical failure. The 500..599
 /// bounds also keep a non-standard status such as `0` or `999` out of the retry
 /// set: only the range that the HTTP specification defines as server error does.
-pub fn is_retriable_status(status : Int) -> Bool {
+pub fn is_retriable_status(status : Int32) -> Bool {
   return status >= 500 && status <= 599
 }
 
@@ -342,8 +346,8 @@ pub fn send_with_retry(
   url : String,
   headers : String,
   body : String,
-  timeout_ms : Int,
-  retry_count : Int,
+  timeout_ms : Int32,
+  retry_count : Int32,
 ) -> Result[Response, String] {
   // A negative budget can only come from a caller driving the runner by hand; it
   // means "no retries", never "retry forever".
@@ -399,9 +403,9 @@ pub struct ResolvedRequest {
   /// Raw request body, or the empty string when the case declared none.
   body : String
   /// Effective timeout, in milliseconds.
-  timeout_ms : Int
+  timeout_ms : Int32
   /// Effective retry budget: how many extra attempts this request may have.
-  retry_count : Int
+  retry_count : Int32
 }
 
 ///|
@@ -426,7 +430,7 @@ fn equals_ignore_case(left : String, right : String) -> Bool {
 
 ///|
 /// Fold one ASCII letter to lower case, leaving every other code point alone.
-fn fold_ascii(code : Int) -> Int {
+fn fold_ascii(code : Int32) -> Int32 {
   if code >= 0x41 && code <= 0x5a {
     return code + 0x20
   }
@@ -529,8 +533,8 @@ fn merge_headers(
 pub fn resolve_request(
   request : @parser.Request,
   config : @parser.Config,
-  timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
-  retry_count? : Int = DEFAULT_RETRY_COUNT,
+  timeout_ms~ : Int32 = DEFAULT_TIMEOUT_MS,
+  retry_count~ : Int32 = DEFAULT_RETRY_COUNT,
 ) -> Result[ResolvedRequest, String] {
   let url = match join_base_url(config.base_url, request.url) {
     Ok(u) => u
@@ -657,8 +661,8 @@ pub fn run_request(
   request : @parser.Request,
   config : @parser.Config,
   context : Map[String, String],
-  timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
-  retry_count? : Int = DEFAULT_RETRY_COUNT,
+  timeout_ms~ : Int32 = DEFAULT_TIMEOUT_MS,
+  retry_count~ : Int32 = DEFAULT_RETRY_COUNT,
 ) -> Result[Response, String] {
   return run_request_with(
     send,
@@ -683,8 +687,8 @@ pub fn run_request_with(
   request : @parser.Request,
   config : @parser.Config,
   context : Map[String, String],
-  timeout_ms? : Int = DEFAULT_TIMEOUT_MS,
-  retry_count? : Int = DEFAULT_RETRY_COUNT,
+  timeout_ms~ : Int32 = DEFAULT_TIMEOUT_MS,
+  retry_count~ : Int32 = DEFAULT_RETRY_COUNT,
 ) -> Result[Response, String] {
   let resolved = match
     resolve_request(request, config, timeout_ms~, retry_count~) {

@@ -435,7 +435,7 @@ test "check_json_type rejects a body that is not json" {
 ///|
 /// Parse a `duration_ms` budget out of a one-line `.probe` source, so that the
 /// test does not have to build the AST by hand.
-fn duration_of(op : String, limit : Int) -> @parser.DurationCheck raise {
+fn duration_of(op : String, limit : Int32) -> @parser.DurationCheck raise {
   let source = "name: \"budget\"\nrequest:\n  url: \"https://a.test\"\nexpect:\n  status: 200\n  duration_ms \{op} \{limit}\n"
   match expect_of(source).duration {
     Some(budget) => budget

@@ -103,8 +103,8 @@ test "the pipeline runs a parsed suite end to end and reports it" {
     url : String,
     headers : String,
     _body : String,
-    _timeout_ms : Int,
-  ) -> Result[(Int, Array[(String, String)], String), String] {
+    _timeout_ms : Int32,
+  ) -> Result[(Int32, Array[(String, String)], String), String] {
     seen.push("\{verb} \{url} | \{headers}")
     if url.contains("/login") {
       return Ok((200, [("X-Token", "tok-7")], ""))

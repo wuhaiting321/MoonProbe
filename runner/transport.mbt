@@ -20,8 +20,8 @@ fn send(
   url : String,
   headers : String,
   body : String,
-  timeout_ms : Int,
-) -> Result[(Int, Array[(String, String)], String), String] {
+  timeout_ms : Int32,
+) -> Result[(Int32, Array[(String, String)], String), String] {
   let declared = if body.length() == 0 { None } else { Some(body) }
   match @http.send_platform(verb, url, headers, declared, timeout_ms) {
     Ok(response) => Ok((response.status, response.headers, response.body))

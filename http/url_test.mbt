@@ -7,7 +7,7 @@
 
 ///|
 test "parse a plain https url" {
-  let url = match parse_url("https://api.example.com/v1/users") {
+  let url = match @http.parse_url("https://api.example.com/v1/users") {
     Ok(value) => value
     Err(msg) => fail("url should parse: \{msg}")
   }
@@ -22,7 +22,7 @@ test "parse a plain https url" {
 
 ///|
 test "parse a http url with an explicit port" {
-  let url = match parse_url("http://api.example.com:8080/ping") {
+  let url = match @http.parse_url("http://api.example.com:8080/ping") {
     Ok(value) => value
     Err(msg) => fail("url should parse: \{msg}")
   }
@@ -33,7 +33,7 @@ test "parse a http url with an explicit port" {
 
 ///|
 test "an empty path becomes the root" {
-  let url = match parse_url("https://api.example.com") {
+  let url = match @http.parse_url("https://api.example.com") {
     Ok(value) => value
     Err(msg) => fail("url should parse: \{msg}")
   }
@@ -42,7 +42,8 @@ test "an empty path becomes the root" {
 
 ///|
 test "the query is split before the fragment" {
-  let url = match parse_url("https://a.test/search?q=moonbit&page=2#results") {
+  let url = match
+    @http.parse_url("https://a.test/search?q=moonbit&page=2#results") {
     Ok(value) => value
     Err(msg) => fail("url should parse: \{msg}")
   }
@@ -53,7 +54,7 @@ test "the query is split before the fragment" {
 
 ///|
 test "a fragment before a question mark is not a query" {
-  let url = match parse_url("https://a.test/doc#frag?q=1") {
+  let url = match @http.parse_url("https://a.test/doc#frag?q=1") {
     Ok(value) => value
     Err(msg) => fail("url should parse: \{msg}")
   }
@@ -64,7 +65,7 @@ test "a fragment before a question mark is not a query" {
 
 ///|
 test "the fragment is preserved but never sent" {
-  let url = match parse_url("https://a.test/path?x=1#section") {
+  let url = match @http.parse_url("https://a.test/path?x=1#section") {
     Ok(value) => value
     Err(msg) => fail("url should parse: \{msg}")
   }
@@ -74,7 +75,7 @@ test "the fragment is preserved but never sent" {
 
 ///|
 test "an empty fragment is still preserved" {
-  let url = match parse_url("https://a.test/path#") {
+  let url = match @http.parse_url("https://a.test/path#") {
     Ok(value) => value
     Err(msg) => fail("url should parse: \{msg}")
   }
@@ -84,7 +85,7 @@ test "an empty fragment is still preserved" {
 
 ///|
 test "the request target keeps the exact query text" {
-  let url = match parse_url("https://a.test/q?a=1&b=%20&c") {
+  let url = match @http.parse_url("https://a.test/q?a=1&b=%20&c") {
     Ok(value) => value
     Err(msg) => fail("url should parse: \{msg}")
   }
@@ -93,7 +94,7 @@ test "the request target keeps the exact query text" {
 
 ///|
 test "the default port is omitted from the host header" {
-  let url = match parse_url("https://a.test:443/x") {
+  let url = match @http.parse_url("https://a.test:443/x") {
     Ok(value) => value
     Err(msg) => fail("url should parse: \{msg}")
   }
@@ -103,7 +104,7 @@ test "the default port is omitted from the host header" {
 
 ///|
 test "parse an IPv6 host with a port" {
-  let url = match parse_url("http://[::1]:8080/x") {
+  let url = match @http.parse_url("http://[::1]:8080/x") {
     Ok(value) => value
     Err(msg) => fail("url should parse: \{msg}")
   }
@@ -115,7 +116,7 @@ test "parse an IPv6 host with a port" {
 
 ///|
 test "parse an IPv6 host without a port" {
-  let url = match parse_url("http://[::1]/x") {
+  let url = match @http.parse_url("http://[::1]/x") {
     Ok(value) => value
     Err(msg) => fail("url should parse: \{msg}")
   }
@@ -126,7 +127,7 @@ test "parse an IPv6 host without a port" {
 
 ///|
 test "user info is accepted and dropped" {
-  let url = match parse_url("https://user:secret@a.test/x") {
+  let url = match @http.parse_url("https://user:secret@a.test/x") {
     Ok(value) => value
     Err(msg) => fail("url should parse: \{msg}")
   }
@@ -136,7 +137,7 @@ test "user info is accepted and dropped" {
 
 ///|
 test "user info with an at sign in the password uses the last at" {
-  let url = match parse_url("https://user:p@ss@a.test/x") {
+  let url = match @http.parse_url("https://user:p@ss@a.test/x") {
     Ok(value) => value
     Err(msg) => fail("url should parse: \{msg}")
   }
@@ -145,7 +146,7 @@ test "user info with an at sign in the password uses the last at" {
 
 ///|
 test "the scheme is lower-cased" {
-  let url = match parse_url("HTTPS://A.TEST/x") {
+  let url = match @http.parse_url("HTTPS://A.TEST/x") {
     Ok(value) => value
     Err(msg) => fail("url should parse: \{msg}")
   }
@@ -155,7 +156,7 @@ test "the scheme is lower-cased" {
 
 ///|
 test "a relative url is rejected" {
-  match parse_url("/v1/users") {
+  match @http.parse_url("/v1/users") {
     Ok(_) => fail("a relative url must not parse")
     Err(msg) =>
       @test.assert_eq(msg.has_prefix("url \"/v1/users\" is not absolute"), true)
@@ -164,7 +165,7 @@ test "a relative url is rejected" {
 
 ///|
 test "an unsupported scheme is rejected" {
-  match parse_url("ftp://a.test/x") {
+  match @http.parse_url("ftp://a.test/x") {
     Ok(_) => fail("ftp must not parse")
     Err(msg) =>
       @test.assert_eq(
@@ -175,7 +176,7 @@ test "an unsupported scheme is rejected" {
 
 ///|
 test "an empty host is rejected" {
-  match parse_url("https:///x") {
+  match @http.parse_url("https:///x") {
     Ok(_) => fail("an empty host must not parse")
     Err(msg) => @test.assert_eq(msg.has_prefix("url \"https:///x\""), true)
   }
@@ -183,7 +184,7 @@ test "an empty host is rejected" {
 
 ///|
 test "a non-numeric port is rejected" {
-  match parse_url("https://a.test:abc/x") {
+  match @http.parse_url("https://a.test:abc/x") {
     Ok(_) => fail("a non-numeric port must not parse")
     Err(msg) =>
       @test.assert_eq(
@@ -194,7 +195,7 @@ test "a non-numeric port is rejected" {
 
 ///|
 test "port zero is rejected" {
-  match parse_url("https://a.test:0/x") {
+  match @http.parse_url("https://a.test:0/x") {
     Ok(_) => fail("port zero must not parse")
     Err(msg) =>
       @test.assert_eq(
@@ -205,7 +206,7 @@ test "port zero is rejected" {
 
 ///|
 test "a port above 65535 is rejected" {
-  match parse_url("https://a.test:70000/x") {
+  match @http.parse_url("https://a.test:70000/x") {
     Ok(_) => fail("an out-of-range port must not parse")
     Err(_) => ()
   }
@@ -213,7 +214,7 @@ test "a port above 65535 is rejected" {
 
 ///|
 test "an unterminated IPv6 host is rejected" {
-  match parse_url("http://[::1/x") {
+  match @http.parse_url("http://[::1/x") {
     Ok(_) => fail("an unterminated IPv6 host must not parse")
     Err(msg) =>
       @test.assert_eq(
@@ -224,6 +225,6 @@ test "an unterminated IPv6 host is rejected" {
 
 ///|
 test "the default port table follows the scheme" {
-  @test.assert_eq(default_port("http"), 80)
-  @test.assert_eq(default_port("https"), 443)
+  @test.assert_eq(@http.default_port("http"), 80)
+  @test.assert_eq(@http.default_port("https"), 443)
 }

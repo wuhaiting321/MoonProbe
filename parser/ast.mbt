@@ -22,10 +22,10 @@ pub struct Request {
   body : String?
   /// Case-level timeout in milliseconds, which wins over the config block's
   /// `global_timeout`. `None` means the case did not declare one.
-  timeout_ms : Int?
+  timeout_ms : Int32?
   /// How many extra attempts this request may have, which wins over the config
   /// block's `retry`. `None` means the case did not declare its own budget.
-  retry_count : Int?
+  retry_count : Int32?
 }
 
 ///|
@@ -55,6 +55,12 @@ pub enum SetSource {
 } derive(Eq)
 
 ///|
+/// Promote the derived comparison to regular methods, as required by the
+/// `implicit_impl_as_method` warning: the parser compares `SetSource` values
+/// directly rather than only through the trait.
+pub extend SetSource with Eq::{not_equal, equal}
+
+///|
 /// A variable extraction performed after a case succeeds, e.g.
 /// `set: token = data.token` binds the value found at the JSON path
 /// `data.token` to the variable name `token`.
@@ -78,9 +84,9 @@ pub struct Config {
   /// Headers sent with every case, unless a case declares the same header.
   global_headers : Array[Pair]
   /// Per-request timeout for every case, in milliseconds.
-  global_timeout_ms : Int?
+  global_timeout_ms : Int32?
   /// Retry budget for every case, overridden by a case's own `retry:`.
-  retry_count : Int?
+  retry_count : Int32?
 }
 
 ///|
@@ -124,6 +130,10 @@ pub enum JsonType {
 } derive(Eq)
 
 ///|
+/// Same promotion for `JsonType`, which the assertion engine compares directly.
+pub extend JsonType with Eq::{not_equal, equal}
+
+///|
 /// The human-readable name of a JSON type: what a `.probe` author writes in a
 /// `type:` or `schema:` expectation, and what a failure message reports.
 pub fn JsonType::label(self : JsonType) -> String {
@@ -154,7 +164,7 @@ pub struct ContainsCheck {
 pub struct LengthCheck {
   /// Dotted JSON path of the array. An empty path addresses the body root.
   path : String
-  size : Int
+  size : Int32
 }
 
 ///|
@@ -172,7 +182,7 @@ pub struct DurationCheck {
   /// One of `<`, `<=`, `>`, `>=`, `==`, `!=`.
   op : String
   /// The bound, in milliseconds. Never negative: the parser rejects that.
-  limit_ms : Int
+  limit_ms : Int32
 }
 
 ///|
@@ -195,7 +205,7 @@ pub struct SchemaField {
 /// The `expect:` block of a single `.probe` case.
 pub struct Expect {
   /// Expected HTTP status code. `None` means it was not declared.
-  status : Int?
+  status : Int32?
   checks : Array[JsonCheck]
   /// Variables extracted from the response body, in declaration order.
   sets : Array[SetSpec]

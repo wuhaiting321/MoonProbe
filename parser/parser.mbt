@@ -162,11 +162,11 @@ pub fn parse(src : String) -> Result[Suite, String] {
 /// "empty block" message can point at it.
 fn parse_hook_cases(
   lines : Array[LexedLine],
-  start : Int,
-  parent_indent : Int,
+  start : Int32,
+  parent_indent : Int32,
   block : String,
-  block_line : Int,
-) -> (Result[Array[Case], String], Int) {
+  block_line : Int32,
+) -> (Result[Array[Case], String], Int32) {
   if start >= lines.length() || lines[start].indent <= parent_indent {
     return (
       Err(
@@ -213,12 +213,12 @@ fn parse_hook_cases(
 /// A request is retried immediately rather than after a delay, so an absurd
 /// budget would not fail — it would hang the run. The cap keeps a typo such as
 /// `retry: 100000` from turning a build job into a timeout.
-const MAX_RETRY_COUNT : Int = 10
+const MAX_RETRY_COUNT : Int32 = 10
 
 ///|
 /// Parse a `retry:` field, shared by the config block and a request block so
 /// that both accept exactly the same values and report the same errors.
-fn parse_retry_count(line : LexedLine) -> Result[Int, String] {
+fn parse_retry_count(line : LexedLine) -> Result[Int32, String] {
   let value = match line.value {
     Some(v) => v
     None =>
@@ -260,13 +260,13 @@ fn parse_retry_count(line : LexedLine) -> Result[Int, String] {
 /// block of `name: value` pairs, exactly like a request's `headers:` block.
 fn parse_config(
   lines : Array[LexedLine],
-  start : Int,
-  parent_indent : Int,
-  line_no : Int,
-) -> (Result[Config, String], Int) {
+  start : Int32,
+  parent_indent : Int32,
+  line_no : Int32,
+) -> (Result[Config, String], Int32) {
   let mut base_url : String? = None
-  let mut timeout_ms : Int? = None
-  let mut retry_count : Int? = None
+  let mut timeout_ms : Int32? = None
+  let mut retry_count : Int32? = None
   let mut headers : Array[Pair] = []
   let field_indent = child_indent_of(lines, start, parent_indent)
   if field_indent < 0 {
@@ -410,9 +410,9 @@ fn is_absolute_url(text : String) -> Bool {
 /// whether the author indents with two, four or more spaces.
 fn child_indent_of(
   lines : Array[LexedLine],
-  start : Int,
-  parent_indent : Int,
-) -> Int {
+  start : Int32,
+  parent_indent : Int32,
+) -> Int32 {
   if start >= lines.length() {
     return -1
   }
@@ -433,10 +433,10 @@ fn child_indent_of(
 fn parse_case(
   names : String,
   lines : Array[LexedLine],
-  start : Int,
-  parent_indent : Int,
+  start : Int32,
+  parent_indent : Int32,
   allow_hooks : Bool,
-) -> (Result[Case, String], Int) {
+) -> (Result[Case, String], Int32) {
   let mut request : Request? = None
   let mut expect : Expect? = None
   let mut before_hooks : Array[Case]? = None
@@ -552,16 +552,16 @@ fn parse_case(
 /// `request:` line itself; its children live one level deeper.
 fn parse_request(
   lines : Array[LexedLine],
-  start : Int,
-  parent_indent : Int,
-) -> (Result[Request, String], Int) {
+  start : Int32,
+  parent_indent : Int32,
+) -> (Result[Request, String], Int32) {
   let mut http_method = "GET"
   let mut url : String? = None
   let mut body : String? = None
   let mut headers : Array[Pair] = []
   let mut query : Array[Pair] = []
-  let mut timeout_ms : Int? = None
-  let mut retry_count : Int? = None
+  let mut timeout_ms : Int32? = None
+  let mut retry_count : Int32? = None
   let field_indent = child_indent_of(lines, start, parent_indent)
   let mut i = start
   while i < lines.length() {
@@ -677,10 +677,10 @@ fn parse_request(
 /// ```
 fn parse_expect(
   lines : Array[LexedLine],
-  start : Int,
-  parent_indent : Int,
-) -> (Result[Expect, String], Int) {
-  let mut status : Int? = None
+  start : Int32,
+  parent_indent : Int32,
+) -> (Result[Expect, String], Int32) {
+  let mut status : Int32? = None
   let mut checks : Array[JsonCheck] = []
   let contains : Array[ContainsCheck] = []
   let lengths : Array[LengthCheck] = []
@@ -887,9 +887,9 @@ fn parse_expect(
 /// line that does not belong to this entry.
 fn parse_length_entries(
   lines : Array[LexedLine],
-  index : Int,
-  indent : Int,
-) -> (Result[Array[LengthCheck], String], Int) {
+  index : Int32,
+  indent : Int32,
+) -> (Result[Array[LengthCheck], String], Int32) {
   let line = lines[index]
   let out : Array[LengthCheck] = []
   match line.value {
@@ -933,9 +933,9 @@ fn parse_length_entries(
 /// block form (`type:` followed by `code: Int`).
 fn parse_type_entries(
   lines : Array[LexedLine],
-  index : Int,
-  indent : Int,
-) -> (Result[Array[TypeCheck], String], Int) {
+  index : Int32,
+  indent : Int32,
+) -> (Result[Array[TypeCheck], String], Int32) {
   let line = lines[index]
   let out : Array[TypeCheck] = []
   match line.value {
@@ -985,9 +985,9 @@ fn parse_type_entries(
 /// structures expressible without any bracket syntax.
 fn parse_schema_fields(
   lines : Array[LexedLine],
-  start : Int,
-  parent_indent : Int,
-) -> (Result[Array[SchemaField], String], Int) {
+  start : Int32,
+  parent_indent : Int32,
+) -> (Result[Array[SchemaField], String], Int32) {
   let out : Array[SchemaField] = []
   let field_indent = child_indent_of(lines, start, parent_indent)
   let mut i = start
@@ -1057,7 +1057,7 @@ fn strip_required(raw : String) -> (String, Bool) {
 
 ///|
 /// Parse a non-negative integer, used by the `length:` expectation.
-fn parse_size(text : String) -> Int? {
+fn parse_size(text : String) -> Int32? {
   match parse_int(trim(text)) {
     Some(n) => if n < 0 { None } else { Some(n) }
     None => None
@@ -1117,7 +1117,7 @@ fn name_matches(text : String, candidate : String) -> Bool {
 
 ///|
 /// Fold one ASCII letter to lower case, leaving every other code point alone.
-fn fold_ascii(code : Int) -> Int {
+fn fold_ascii(code : Int32) -> Int32 {
   if code >= 0x41 && code <= 0x5a {
     return code + 0x20
   }
@@ -1127,7 +1127,7 @@ fn fold_ascii(code : Int) -> Int {
 ///|
 /// Split the value of a `duration_ms` assertion, e.g. `< 500`, into its
 /// operator and its bound in milliseconds.
-fn split_comparison_value(text : String) -> (String, Int)? {
+fn split_comparison_value(text : String) -> (String, Int32)? {
   let value = trim(text)
   let operators : Array[String] = ["<=", ">=", "==", "!=", "<", ">"]
   for op in operators {
@@ -1213,9 +1213,9 @@ fn parse_set_target(name : String, target : String) -> Result[SetSpec, String] {
 /// value is recorded as the empty string, which no JSON scalar can equal.
 fn parse_json_checks(
   lines : Array[LexedLine],
-  start : Int,
-  sub_parent_indent : Int,
-) -> (Array[JsonCheck], Int) {
+  start : Int32,
+  sub_parent_indent : Int32,
+) -> (Array[JsonCheck], Int32) {
   let out : Array[JsonCheck] = []
   let item_indent = child_indent_of(lines, start, sub_parent_indent)
   let mut i = start
@@ -1240,9 +1240,9 @@ fn parse_json_checks(
 /// at `sub_parent_indent` (the block header line's own indentation).
 fn parse_pairs(
   lines : Array[LexedLine],
-  start : Int,
-  sub_parent_indent : Int,
-) -> (Array[Pair], Int) {
+  start : Int32,
+  sub_parent_indent : Int32,
+) -> (Array[Pair], Int32) {
   let out : Array[Pair] = []
   let item_indent = child_indent_of(lines, start, sub_parent_indent)
   let mut i = start
@@ -1271,7 +1271,7 @@ fn parse_pairs(
 
 ///|
 /// Parse a decimal integer, returning `None` on non-numeric input.
-fn parse_int(s : String) -> Int? {
+fn parse_int(s : String) -> Int32? {
   let n = s.length()
   if n == 0 {
     return None

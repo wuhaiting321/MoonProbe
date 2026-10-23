@@ -15,7 +15,7 @@ pub fn send_platform(
   raw_url : String,
   header_block : String,
   body : String?,
-  timeout_ms : Int,
+  timeout_ms : Int32,
 ) -> Result[Response, String] {
   ignore((http_method, raw_url, header_block, body, timeout_ms))
   return Err(

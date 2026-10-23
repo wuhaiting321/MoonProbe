@@ -36,7 +36,7 @@ fn decode_body(body : String) -> Result[Json, String] {
 
 ///|
 /// Compare the response status against the expected one.
-pub fn check_status(expected : Int, actual : Int) -> Result[Unit, String] {
+pub fn check_status(expected : Int32, actual : Int32) -> Result[Unit, String] {
   if expected == actual {
     return Ok(())
   }
@@ -176,7 +176,7 @@ priv enum ExpectedLiteral {
 
 ///|
 /// Whether `code` is an ASCII digit.
-fn is_digit_code(code : Int) -> Bool {
+fn is_digit_code(code : Int32) -> Bool {
   return code >= 0x30 && code <= 0x39
 }
 
@@ -583,7 +583,7 @@ fn label_of(path : String) -> String {
 /// Only ASCII is folded on purpose: a full Unicode case mapping would need
 /// tables that would dwarf the rest of this package, and API status text is
 /// ASCII in practice.
-fn fold_ascii(code : Int) -> Int {
+fn fold_ascii(code : Int32) -> Int32 {
   if code >= 0x41 && code <= 0x5a {
     return code + 0x20
   }
@@ -653,7 +653,7 @@ pub fn check_contains(
 fn length_in(
   json : Json,
   path : String,
-  expected : Int,
+  expected : Int32,
 ) -> Result[Unit, String] {
   let value = match lookup_path(json, path) {
     Some(v) => v
@@ -685,7 +685,7 @@ fn length_in(
 pub fn check_length(
   body : String,
   path : String,
-  expected : Int,
+  expected : Int32,
 ) -> Result[Unit, String] {
   let json = match decode_body(body) {
     Ok(value) => value
@@ -742,7 +742,7 @@ pub fn check_json_type(
 
 ///|
 /// Apply a comparison operator to a measured duration and its bound.
-fn compare_int(op : String, actual : Int, limit : Int) -> Bool {
+fn compare_int(op : String, actual : Int32, limit : Int32) -> Bool {
   match op {
     "<" => actual < limit
     "<=" => actual <= limit
@@ -764,7 +764,7 @@ pub fn check_duration(
   expected : @parser.DurationCheck,
   actual_ms : UInt64,
 ) -> Result[Unit, String] {
-  let actual : Int = actual_ms.to_int()
+  let actual : Int32 = actual_ms.to_int()
   if compare_int(expected.op, actual, expected.limit_ms) {
     return Ok(())
   }
@@ -877,7 +877,7 @@ pub fn check_schema(
 /// and never for the ones that work on the raw text.
 pub fn check_expect(
   expect : @parser.Expect,
-  status : Int,
+  status : Int32,
   body : String,
   elapsed_ms : UInt64,
 ) -> Array[String] {

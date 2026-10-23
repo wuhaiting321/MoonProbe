@@ -11,7 +11,7 @@
 /// A read position over a byte buffer.
 pub struct Cursor {
   data : Bytes
-  mut pos : Int
+  mut pos : Int32
 }
 
 ///|
@@ -22,7 +22,7 @@ pub fn Cursor::new(data : Bytes) -> Cursor {
 
 ///|
 /// How many bytes are left to read.
-pub fn Cursor::remaining(self : Cursor) -> Int {
+pub fn Cursor::remaining(self : Cursor) -> Int32 {
   return self.data.length() - self.pos
 }
 
@@ -63,7 +63,10 @@ fn Cursor::read_line(self : Cursor) -> Result[BytesView, String] {
 
 ///|
 /// Read exactly `count` bytes, or fail when the message ends early.
-fn Cursor::read_exact(self : Cursor, count : Int) -> Result[BytesView, String] {
+fn Cursor::read_exact(
+  self : Cursor,
+  count : Int32,
+) -> Result[BytesView, String] {
   if count < 0 {
     return Err("internal error: negative read length")
   }

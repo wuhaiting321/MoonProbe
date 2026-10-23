@@ -24,7 +24,7 @@ const ANSI_RED : String = "\u{1b}[31m"
 ///
 /// It reports the three counts a CI log is scanned for, plus the wall-clock
 /// duration of the run.
-fn summary_line(total : Int, passed : Int, elapsed_ms : UInt64) -> String {
+fn summary_line(total : Int32, passed : Int32, elapsed_ms : UInt64) -> String {
   return "Summary: \{total} total, \{passed} passed, \{total - passed} failed in \{elapsed_ms} ms"
 }
 

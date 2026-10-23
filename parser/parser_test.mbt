@@ -203,7 +203,7 @@ const FX_ERR_SET_EMPTY_BLOCK : String =
 ///|
 test "lex skips comments and blank lines, preserves indentation" {
   let src = "name: a\n\n  # a comment\nrequest:\n"
-  let lines = match lex(src) {
+  let lines = match @parser.lex(src) {
     Ok(v) => v
     Err(_) => fail("lex should succeed")
   }
@@ -216,7 +216,7 @@ test "lex skips comments and blank lines, preserves indentation" {
 
 ///|
 test "lex keeps unquoted values verbatim" {
-  let lines = match lex("  Authorization: Bearer abc\n") {
+  let lines = match @parser.lex("  Authorization: Bearer abc\n") {
     Ok(v) => v
     Err(_) => fail("lex should succeed")
   }
@@ -227,7 +227,7 @@ test "lex keeps unquoted values verbatim" {
 
 ///|
 test "lex strips matching quotes from a value" {
-  let lines = match lex("url: \"https://api.example.com\"\n") {
+  let lines = match @parser.lex("url: \"https://api.example.com\"\n") {
     Ok(v) => v
     Err(_) => fail("lex should succeed")
   }
@@ -236,7 +236,7 @@ test "lex strips matching quotes from a value" {
 
 ///|
 test "lex treats a key without a value as a block header" {
-  let lines = match lex("expect:\n  status: 200\n") {
+  let lines = match @parser.lex("expect:\n  status: 200\n") {
     Ok(v) => v
     Err(_) => fail("lex should succeed")
   }
@@ -249,7 +249,7 @@ test "lex treats a key without a value as a block header" {
 
 ///|
 test "lex counts a tab as two columns of indentation" {
-  let lines = match lex("\turl: x\n") {
+  let lines = match @parser.lex("\turl: x\n") {
     Ok(v) => v
     Err(_) => fail("lex should succeed")
   }
@@ -259,7 +259,7 @@ test "lex counts a tab as two columns of indentation" {
 
 ///|
 test "lex rejects a line without a colon" {
-  let res = lex(FX_ERR_NO_COLON)
+  let res = @parser.lex(FX_ERR_NO_COLON)
   match res {
     Err(_) => ()
     Ok(_) => fail("should reject malformed key line")
@@ -272,7 +272,7 @@ test "lex rejects a line without a colon" {
 
 ///|
 test "parse builds a full suite with request and expect blocks" {
-  let suite = match parse(FX_GET_FULL) {
+  let suite = match @parser.parse(FX_GET_FULL) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -302,7 +302,7 @@ test "parse builds a full suite with request and expect blocks" {
 
 ///|
 test "parse supports multiple cases in one suite" {
-  let suite = match parse(FX_MULTI_CASE) {
+  let suite = match @parser.parse(FX_MULTI_CASE) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -314,7 +314,7 @@ test "parse supports multiple cases in one suite" {
 
 ///|
 test "parse stores the request body when declared" {
-  let suite = match parse(FX_POST_BODY) {
+  let suite = match @parser.parse(FX_POST_BODY) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -327,7 +327,7 @@ test "parse stores the request body when declared" {
 
 ///|
 test "parse defaults the method to GET when omitted" {
-  let suite = match parse(FX_DEFAULT_METHOD) {
+  let suite = match @parser.parse(FX_DEFAULT_METHOD) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -336,7 +336,7 @@ test "parse defaults the method to GET when omitted" {
 
 ///|
 test "parse accepts four-space indentation" {
-  let suite = match parse(FX_FOUR_SPACE_INDENT) {
+  let suite = match @parser.parse(FX_FOUR_SPACE_INDENT) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -350,7 +350,7 @@ test "parse accepts four-space indentation" {
 
 ///|
 test "parse accepts tab indentation" {
-  let suite = match parse(FX_TAB_INDENT) {
+  let suite = match @parser.parse(FX_TAB_INDENT) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -360,7 +360,7 @@ test "parse accepts tab indentation" {
 
 ///|
 test "parse reads an inline set directive" {
-  let suite = match parse(FX_SET_INLINE) {
+  let suite = match @parser.parse(FX_SET_INLINE) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -372,7 +372,7 @@ test "parse reads an inline set directive" {
 
 ///|
 test "parse reads a block set directive" {
-  let suite = match parse(FX_SET_BLOCK) {
+  let suite = match @parser.parse(FX_SET_BLOCK) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -386,7 +386,7 @@ test "parse reads a block set directive" {
 
 ///|
 test "parse leaves sets empty when no set directive is present" {
-  let suite = match parse(FX_DEFAULT_METHOD) {
+  let suite = match @parser.parse(FX_DEFAULT_METHOD) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -399,7 +399,7 @@ test "parse leaves sets empty when no set directive is present" {
 
 ///|
 test "parse rejects an empty suite" {
-  match parse(FX_EMPTY) {
+  match @parser.parse(FX_EMPTY) {
     Err(_) => ()
     Ok(_) => fail("should reject empty source")
   }
@@ -407,7 +407,7 @@ test "parse rejects an empty suite" {
 
 ///|
 test "parse rejects a case without a request block" {
-  match parse(FX_ERR_NO_REQUEST) {
+  match @parser.parse(FX_ERR_NO_REQUEST) {
     Err(_) => ()
     Ok(_) => fail("should reject case without request")
   }
@@ -415,7 +415,7 @@ test "parse rejects a case without a request block" {
 
 ///|
 test "parse rejects a request without a url" {
-  match parse(FX_ERR_NO_URL) {
+  match @parser.parse(FX_ERR_NO_URL) {
     Err(_) => ()
     Ok(_) => fail("should reject request without url")
   }
@@ -423,7 +423,7 @@ test "parse rejects a request without a url" {
 
 ///|
 test "parse rejects a case without an expect block" {
-  match parse(FX_ERR_NO_EXPECT) {
+  match @parser.parse(FX_ERR_NO_EXPECT) {
     Err(_) => ()
     Ok(_) => fail("should reject case without expect")
   }
@@ -431,7 +431,7 @@ test "parse rejects a case without an expect block" {
 
 ///|
 test "parse rejects a non-numeric status code" {
-  match parse(FX_ERR_BAD_STATUS) {
+  match @parser.parse(FX_ERR_BAD_STATUS) {
     Err(_) => ()
     Ok(_) => fail("should reject invalid status")
   }
@@ -439,7 +439,7 @@ test "parse rejects a non-numeric status code" {
 
 ///|
 test "parse rejects indentation at top level" {
-  match parse(FX_ERR_TOP_LEVEL_INDENT) {
+  match @parser.parse(FX_ERR_TOP_LEVEL_INDENT) {
     Err(_) => ()
     Ok(_) => fail("should reject indented top-level line")
   }
@@ -447,7 +447,7 @@ test "parse rejects indentation at top level" {
 
 ///|
 test "parse rejects an empty case name" {
-  match parse(FX_ERR_EMPTY_NAME) {
+  match @parser.parse(FX_ERR_EMPTY_NAME) {
     Err(_) => ()
     Ok(_) => fail("should reject empty case name")
   }
@@ -455,7 +455,7 @@ test "parse rejects an empty case name" {
 
 ///|
 test "parse rejects an unknown request field" {
-  match parse(FX_ERR_UNKNOWN_FIELD) {
+  match @parser.parse(FX_ERR_UNKNOWN_FIELD) {
     Err(_) => ()
     Ok(_) => fail("should reject unknown request field")
   }
@@ -463,7 +463,7 @@ test "parse rejects an unknown request field" {
 
 ///|
 test "parse rejects an inline set without an assignment" {
-  match parse(FX_ERR_SET_NO_ASSIGN) {
+  match @parser.parse(FX_ERR_SET_NO_ASSIGN) {
     Err(_) => ()
     Ok(_) => fail("should reject set without an assignment")
   }
@@ -471,7 +471,7 @@ test "parse rejects an inline set without an assignment" {
 
 ///|
 test "parse rejects an empty set block" {
-  match parse(FX_ERR_SET_EMPTY_BLOCK) {
+  match @parser.parse(FX_ERR_SET_EMPTY_BLOCK) {
     Err(_) => ()
     Ok(_) => fail("should reject an empty set block")
   }
@@ -718,7 +718,7 @@ const FX_ERR_SCHEMA_NESTED_SCALAR : String =
 
 ///|
 test "parse reads contains expectations, case-sensitive and folded" {
-  let suite = match parse(FX_EXPECT_FULL) {
+  let suite = match @parser.parse(FX_EXPECT_FULL) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -732,7 +732,7 @@ test "parse reads contains expectations, case-sensitive and folded" {
 
 ///|
 test "parse reads a duration budget written as a bare comparison" {
-  let suite = match parse(FX_EXPECT_FULL) {
+  let suite = match @parser.parse(FX_EXPECT_FULL) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -746,7 +746,7 @@ test "parse reads a duration budget written as a bare comparison" {
 
 ///|
 test "parse reads a duration budget written as a key/value pair" {
-  let suite = match parse(FX_DURATION_COLON) {
+  let suite = match @parser.parse(FX_DURATION_COLON) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -760,7 +760,7 @@ test "parse reads a duration budget written as a key/value pair" {
 
 ///|
 test "parse reads a length block" {
-  let suite = match parse(FX_EXPECT_FULL) {
+  let suite = match @parser.parse(FX_EXPECT_FULL) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -772,7 +772,7 @@ test "parse reads a length block" {
 
 ///|
 test "parse reads an inline length for the body root" {
-  let suite = match parse(FX_LENGTH_ROOT) {
+  let suite = match @parser.parse(FX_LENGTH_ROOT) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -784,7 +784,7 @@ test "parse reads an inline length for the body root" {
 
 ///|
 test "parse reads a type block and normalises type names" {
-  let suite = match parse(FX_EXPECT_FULL) {
+  let suite = match @parser.parse(FX_EXPECT_FULL) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -798,7 +798,7 @@ test "parse reads a type block and normalises type names" {
 
 ///|
 test "parse reads an inline type for the body root" {
-  let suite = match parse(FX_TYPE_ROOT) {
+  let suite = match @parser.parse(FX_TYPE_ROOT) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -810,7 +810,7 @@ test "parse reads an inline type for the body root" {
 
 ///|
 test "parse reads a nested schema" {
-  let suite = match parse(FX_EXPECT_FULL) {
+  let suite = match @parser.parse(FX_EXPECT_FULL) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -836,7 +836,7 @@ test "parse reads a nested schema" {
 
 ///|
 test "parse reads a flat schema of required fields" {
-  let suite = match parse(FX_SCHEMA_ONLY) {
+  let suite = match @parser.parse(FX_SCHEMA_ONLY) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -852,7 +852,7 @@ test "parse reads a flat schema of required fields" {
 
 ///|
 test "parse leaves the extended expectations empty when unused" {
-  let suite = match parse(FX_DEFAULT_METHOD) {
+  let suite = match @parser.parse(FX_DEFAULT_METHOD) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -869,7 +869,7 @@ test "parse leaves the extended expectations empty when unused" {
 
 ///|
 test "parse rejects contains without a value" {
-  match parse(FX_ERR_CONTAINS_NO_VALUE) {
+  match @parser.parse(FX_ERR_CONTAINS_NO_VALUE) {
     Err(_) => ()
     Ok(_) => fail("should reject contains without a value")
   }
@@ -877,7 +877,7 @@ test "parse rejects contains without a value" {
 
 ///|
 test "parse rejects a non-numeric length" {
-  match parse(FX_ERR_LENGTH_NOT_INT) {
+  match @parser.parse(FX_ERR_LENGTH_NOT_INT) {
     Err(_) => ()
     Ok(_) => fail("should reject a non-numeric length")
   }
@@ -885,7 +885,7 @@ test "parse rejects a non-numeric length" {
 
 ///|
 test "parse rejects a negative length" {
-  match parse(FX_ERR_LENGTH_NEGATIVE) {
+  match @parser.parse(FX_ERR_LENGTH_NEGATIVE) {
     Err(_) => ()
     Ok(_) => fail("should reject a negative length")
   }
@@ -893,7 +893,7 @@ test "parse rejects a negative length" {
 
 ///|
 test "parse rejects an empty length block" {
-  match parse(FX_ERR_LENGTH_EMPTY_BLOCK) {
+  match @parser.parse(FX_ERR_LENGTH_EMPTY_BLOCK) {
     Err(_) => ()
     Ok(_) => fail("should reject an empty length block")
   }
@@ -901,7 +901,7 @@ test "parse rejects an empty length block" {
 
 ///|
 test "parse rejects an unknown type name" {
-  match parse(FX_ERR_TYPE_UNKNOWN) {
+  match @parser.parse(FX_ERR_TYPE_UNKNOWN) {
     Err(_) => ()
     Ok(_) => fail("should reject an unknown type name")
   }
@@ -909,7 +909,7 @@ test "parse rejects an unknown type name" {
 
 ///|
 test "parse rejects an empty type block" {
-  match parse(FX_ERR_TYPE_EMPTY_BLOCK) {
+  match @parser.parse(FX_ERR_TYPE_EMPTY_BLOCK) {
     Err(_) => ()
     Ok(_) => fail("should reject an empty type block")
   }
@@ -917,7 +917,7 @@ test "parse rejects an empty type block" {
 
 ///|
 test "parse rejects duration_ms without a budget" {
-  match parse(FX_ERR_DURATION_BARE) {
+  match @parser.parse(FX_ERR_DURATION_BARE) {
     Err(_) => ()
     Ok(_) => fail("should reject a bare duration_ms")
   }
@@ -925,7 +925,7 @@ test "parse rejects duration_ms without a budget" {
 
 ///|
 test "parse rejects a duration comparison without a number" {
-  match parse(FX_ERR_DURATION_BAD_OP) {
+  match @parser.parse(FX_ERR_DURATION_BAD_OP) {
     Err(_) => ()
     Ok(_) => fail("should reject a duration comparison without a number")
   }
@@ -933,7 +933,7 @@ test "parse rejects a duration comparison without a number" {
 
 ///|
 test "parse rejects a negative duration budget" {
-  match parse(FX_ERR_DURATION_NEGATIVE) {
+  match @parser.parse(FX_ERR_DURATION_NEGATIVE) {
     Err(_) => ()
     Ok(_) => fail("should reject a negative duration budget")
   }
@@ -941,7 +941,7 @@ test "parse rejects a negative duration budget" {
 
 ///|
 test "parse rejects an inline schema" {
-  match parse(FX_ERR_SCHEMA_INLINE) {
+  match @parser.parse(FX_ERR_SCHEMA_INLINE) {
     Err(_) => ()
     Ok(_) => fail("should reject an inline schema")
   }
@@ -949,7 +949,7 @@ test "parse rejects an inline schema" {
 
 ///|
 test "parse rejects an empty schema block" {
-  match parse(FX_ERR_SCHEMA_EMPTY) {
+  match @parser.parse(FX_ERR_SCHEMA_EMPTY) {
     Err(_) => ()
     Ok(_) => fail("should reject an empty schema block")
   }
@@ -957,7 +957,7 @@ test "parse rejects an empty schema block" {
 
 ///|
 test "parse rejects a schema field without a type" {
-  match parse(FX_ERR_SCHEMA_NO_TYPE) {
+  match @parser.parse(FX_ERR_SCHEMA_NO_TYPE) {
     Err(_) => ()
     Ok(_) => fail("should reject a schema field without a type")
   }
@@ -965,7 +965,7 @@ test "parse rejects a schema field without a type" {
 
 ///|
 test "parse rejects an unknown schema type" {
-  match parse(FX_ERR_SCHEMA_BAD_TYPE) {
+  match @parser.parse(FX_ERR_SCHEMA_BAD_TYPE) {
     Err(_) => ()
     Ok(_) => fail("should reject an unknown schema type")
   }
@@ -973,7 +973,7 @@ test "parse rejects an unknown schema type" {
 
 ///|
 test "parse rejects nested fields under a scalar schema field" {
-  match parse(FX_ERR_SCHEMA_NESTED_SCALAR) {
+  match @parser.parse(FX_ERR_SCHEMA_NESTED_SCALAR) {
     Err(_) => ()
     Ok(_) => fail("should reject nesting under a scalar field")
   }
@@ -985,7 +985,7 @@ test "parse rejects nested fields under a scalar schema field" {
 
 ///|
 test "lex decodes the escape sequences of a quoted value" {
-  let lines = match lex("body: \"a\\nb\\t\\\"c\\\\d\"\n") {
+  let lines = match @parser.lex("body: \"a\\nb\\t\\\"c\\\\d\"\n") {
     Ok(v) => v
     Err(msg) => fail("lex should succeed: \{msg}")
   }
@@ -995,7 +995,7 @@ test "lex decodes the escape sequences of a quoted value" {
 
 ///|
 test "lex keeps an unknown escape sequence verbatim" {
-  let lines = match lex("x: \"a\\qb\"\n") {
+  let lines = match @parser.lex("x: \"a\\qb\"\n") {
     Ok(v) => v
     Err(msg) => fail("lex should succeed: \{msg}")
   }
@@ -1004,7 +1004,7 @@ test "lex keeps an unknown escape sequence verbatim" {
 
 ///|
 test "lex leaves an unquoted backslash alone" {
-  let lines = match lex("path: C:\\temp\\new\n") {
+  let lines = match @parser.lex("path: C:\\temp\\new\n") {
     Ok(v) => v
     Err(msg) => fail("lex should succeed: \{msg}")
   }
@@ -1013,7 +1013,7 @@ test "lex leaves an unquoted backslash alone" {
 
 ///|
 test "lex recognises a bare comparison expression" {
-  let lines = match lex("  duration_ms < 500\n") {
+  let lines = match @parser.lex("  duration_ms < 500\n") {
     Ok(v) => v
     Err(msg) => fail("lex should succeed: \{msg}")
   }
@@ -1024,7 +1024,7 @@ test "lex recognises a bare comparison expression" {
 
 ///|
 test "lex recognises a two-character comparison operator" {
-  let lines = match lex("duration_ms >= 10\n") {
+  let lines = match @parser.lex("duration_ms >= 10\n") {
     Ok(v) => v
     Err(msg) => fail("lex should succeed: \{msg}")
   }
@@ -1033,7 +1033,7 @@ test "lex recognises a two-character comparison operator" {
 
 ///|
 test "lex still rejects a bare assignment" {
-  match lex("total = 5\n") {
+  match @parser.lex("total = 5\n") {
     Err(_) => ()
     Ok(_) => fail("a bare assignment is not a comparison expression")
   }
@@ -1073,7 +1073,7 @@ const FX_CONFIG_BASE_ONLY : String =
 
 ///|
 test "parse reads a full config block" {
-  let suite = match parse(FX_CONFIG_FULL) {
+  let suite = match @parser.parse(FX_CONFIG_FULL) {
     Ok(v) => v
     Err(msg) => fail("config fixture should parse: \{msg}")
   }
@@ -1088,7 +1088,7 @@ test "parse reads a full config block" {
 
 ///|
 test "parse keeps the global headers in declaration order" {
-  let suite = match parse(FX_CONFIG_FULL) {
+  let suite = match @parser.parse(FX_CONFIG_FULL) {
     Ok(v) => v
     Err(msg) => fail("config fixture should parse: \{msg}")
   }
@@ -1102,7 +1102,7 @@ test "parse keeps the global headers in declaration order" {
 
 ///|
 test "parse defaults to the empty config when no block is declared" {
-  let suite = match parse(FX_GET_FULL) {
+  let suite = match @parser.parse(FX_GET_FULL) {
     Ok(v) => v
     Err(msg) => fail("fixture should parse: \{msg}")
   }
@@ -1113,7 +1113,7 @@ test "parse defaults to the empty config when no block is declared" {
 
 ///|
 test "parse leaves the global timeout unset when only base_url is declared" {
-  let suite = match parse(FX_CONFIG_BASE_ONLY) {
+  let suite = match @parser.parse(FX_CONFIG_BASE_ONLY) {
     Ok(v) => v
     Err(msg) => fail("config fixture should parse: \{msg}")
   }
@@ -1131,7 +1131,7 @@ test "parse reads a case-level timeout" {
     #|expect:
     #|  status: 200
     #|
-  let suite = match parse(src) {
+  let suite = match @parser.parse(src) {
     Ok(v) => v
     Err(msg) => fail("fixture should parse: \{msg}")
   }
@@ -1140,7 +1140,7 @@ test "parse reads a case-level timeout" {
 
 ///|
 test "parse leaves the case timeout unset when it is omitted" {
-  let suite = match parse(FX_CONFIG_BASE_ONLY) {
+  let suite = match @parser.parse(FX_CONFIG_BASE_ONLY) {
     Ok(v) => v
     Err(msg) => fail("fixture should parse: \{msg}")
   }
@@ -1158,7 +1158,7 @@ test "parse rejects a config block declared after the first case" {
     #|config:
     #|  base_url: "https://api.example.com"
     #|
-  match parse(src) {
+  match @parser.parse(src) {
     Err(msg) =>
       @test.assert_eq(msg.contains("must appear before the first case"), true)
     Ok(_) => fail("a trailing config block must be rejected")
@@ -1178,7 +1178,7 @@ test "parse rejects a duplicate config block" {
     #|expect:
     #|  status: 200
     #|
-  match parse(src) {
+  match @parser.parse(src) {
     Err(msg) => @test.assert_eq(msg.contains("duplicate config block"), true)
     Ok(_) => fail("a second config block must be rejected")
   }
@@ -1186,7 +1186,7 @@ test "parse rejects a duplicate config block" {
 
 ///|
 test "parse rejects an empty config block" {
-  match parse("config:\nname: \"x\"\n") {
+  match @parser.parse("config:\nname: \"x\"\n") {
     Err(msg) => @test.assert_eq(msg.contains("config block is empty"), true)
     Ok(_) => fail("an empty config block must be rejected")
   }
@@ -1198,7 +1198,7 @@ test "parse rejects an unknown config key" {
     #|config:
     #|  base_path: "https://api.example.com"
     #|
-  match parse(src) {
+  match @parser.parse(src) {
     Err(msg) => @test.assert_eq(msg.contains("unknown config key"), true)
     Ok(_) => fail("an unknown config key must be rejected")
   }
@@ -1215,7 +1215,7 @@ test "parse rejects a relative base_url" {
     #|expect:
     #|  status: 200
     #|
-  match parse(src) {
+  match @parser.parse(src) {
     Err(msg) =>
       @test.assert_eq(msg.contains("must be an absolute http(s) url"), true)
     Ok(_) => fail("a relative base_url must be rejected")
@@ -1233,7 +1233,7 @@ test "parse rejects a non-absolute config url that only looks like one" {
     #|expect:
     #|  status: 200
     #|
-  match parse(src) {
+  match @parser.parse(src) {
     Err(msg) =>
       @test.assert_eq(msg.contains("must be an absolute http(s) url"), true)
     Ok(_) => fail("only http(s) is a usable base_url")
@@ -1252,7 +1252,7 @@ test "parse rejects a negative global timeout" {
     #|expect:
     #|  status: 200
     #|
-  match parse(src) {
+  match @parser.parse(src) {
     Err(msg) =>
       @test.assert_eq(msg.contains("global_timeout must not be negative"), true)
     Ok(_) => fail("a negative timeout must be rejected")
@@ -1271,7 +1271,7 @@ test "parse rejects a non-numeric global timeout" {
     #|expect:
     #|  status: 200
     #|
-  match parse(src) {
+  match @parser.parse(src) {
     Err(msg) => @test.assert_eq(msg.contains("invalid global_timeout"), true)
     Ok(_) => fail("a non-numeric timeout must be rejected")
   }
@@ -1287,7 +1287,7 @@ test "parse rejects a negative case timeout" {
     #|expect:
     #|  status: 200
     #|
-  match parse(src) {
+  match @parser.parse(src) {
     Err(msg) =>
       @test.assert_eq(msg.contains("timeout must not be negative"), true)
     Ok(_) => fail("a negative case timeout must be rejected")
@@ -1314,7 +1314,7 @@ const FX_SET_SOURCES : String =
 
 ///|
 test "parse reads set directives from the body, header and cookie" {
-  let suite = match parse(FX_SET_SOURCES) {
+  let suite = match @parser.parse(FX_SET_SOURCES) {
     Ok(v) => v
     Err(msg) => fail("set fixture should parse: \{msg}")
   }
@@ -1352,7 +1352,7 @@ test "parse folds the case of a set source prefix" {
     #|  set: sid = Cookies.session
     #|  set: uid = Body.data.id
     #|
-  let suite = match parse(src) {
+  let suite = match @parser.parse(src) {
     Ok(v) => v
     Err(msg) => fail("set fixture should parse: \{msg}")
   }
@@ -1381,7 +1381,7 @@ test "parse rejects a set prefix without a name after the dot" {
     #|  status: 200
     #|  set: token = header.
     #|
-  match parse(src) {
+  match @parser.parse(src) {
     Err(msg) =>
       @test.assert_eq(msg.contains("needs a name after the dot"), true)
     Ok(_) => fail("`header.` alone names nothing to read")
@@ -1420,7 +1420,7 @@ const FX_INLINE_COMMENTS : String =
 
 ///|
 test "lex strips a trailing comment after a quoted value" {
-  let lines = match lex("  url: \"/users\"    # the endpoint\n") {
+  let lines = match @parser.lex("  url: \"/users\"    # the endpoint\n") {
     Ok(v) => v
     Err(msg) => fail("lex should succeed: \{msg}")
   }
@@ -1431,7 +1431,8 @@ test "lex strips a trailing comment after a quoted value" {
 
 ///|
 test "lex strips a trailing comment after a bare comparison" {
-  let lines = match lex("  duration_ms <= 2000   # a generous budget\n") {
+  let lines = match
+    @parser.lex("  duration_ms <= 2000   # a generous budget\n") {
     Ok(v) => v
     Err(msg) => fail("lex should succeed: \{msg}")
   }
@@ -1441,7 +1442,7 @@ test "lex strips a trailing comment after a bare comparison" {
 
 ///|
 test "lex keeps a hash that is glued to an unquoted value" {
-  let lines = match lex("url: https://a.api.test/x#frag\n") {
+  let lines = match @parser.lex("url: https://a.api.test/x#frag\n") {
     Ok(v) => v
     Err(msg) => fail("lex should succeed: \{msg}")
   }
@@ -1450,7 +1451,7 @@ test "lex keeps a hash that is glued to an unquoted value" {
 
 ///|
 test "lex keeps a hash that sits inside a quoted value" {
-  let lines = match lex("contains: \"#tag\"  # a real comment\n") {
+  let lines = match @parser.lex("contains: \"#tag\"  # a real comment\n") {
     Ok(v) => v
     Err(msg) => fail("lex should succeed: \{msg}")
   }
@@ -1461,7 +1462,7 @@ test "lex keeps a hash that sits inside a quoted value" {
 ///|
 test "lex drops a comment indented deeper than the code around it" {
   let src = "expect:\n  status: 200\n        # far deeper than the fields\n  json:\n    ok: true\n"
-  let lines = match lex(src) {
+  let lines = match @parser.lex(src) {
     Ok(v) => v
     Err(msg) => fail("lex should succeed: \{msg}")
   }
@@ -1473,7 +1474,7 @@ test "lex drops a comment indented deeper than the code around it" {
 
 ///|
 test "parse accepts a trailing comment on every line of a suite" {
-  let suite = match parse(FX_INLINE_COMMENTS) {
+  let suite = match @parser.parse(FX_INLINE_COMMENTS) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -1512,7 +1513,7 @@ fn retry_fixture(declaration : String) -> String {
 
 ///|
 test "parse reads a retry budget declared by a case" {
-  let suite = match parse(retry_fixture("  retry: 2\n")) {
+  let suite = match @parser.parse(retry_fixture("  retry: 2\n")) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -1521,7 +1522,7 @@ test "parse reads a retry budget declared by a case" {
 
 ///|
 test "parse leaves the case retry budget unset when it is not declared" {
-  let suite = match parse(retry_fixture("")) {
+  let suite = match @parser.parse(retry_fixture("")) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -1540,7 +1541,7 @@ test "parse reads a retry budget declared by the config block" {
     #|expect:
     #|  status: 200
     #|
-  let suite = match parse(source) {
+  let suite = match @parser.parse(source) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -1549,7 +1550,7 @@ test "parse reads a retry budget declared by the config block" {
 
 ///|
 test "parse accepts the largest retry budget" {
-  let suite = match parse(retry_fixture("  retry: 10\n")) {
+  let suite = match @parser.parse(retry_fixture("  retry: 10\n")) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -1558,7 +1559,7 @@ test "parse accepts the largest retry budget" {
 
 ///|
 test "parse rejects a retry budget above the cap" {
-  match parse(retry_fixture("  retry: 11\n")) {
+  match @parser.parse(retry_fixture("  retry: 11\n")) {
     Err(msg) => @test.assert_eq(msg.contains("retry must not exceed 10"), true)
     Ok(_) => fail("should reject a retry budget above the cap")
   }
@@ -1566,7 +1567,7 @@ test "parse rejects a retry budget above the cap" {
 
 ///|
 test "parse rejects a negative retry budget" {
-  match parse(retry_fixture("  retry: -1\n")) {
+  match @parser.parse(retry_fixture("  retry: -1\n")) {
     Err(msg) =>
       @test.assert_eq(msg.contains("retry must not be negative"), true)
     Ok(_) => fail("should reject a negative retry budget")
@@ -1575,7 +1576,7 @@ test "parse rejects a negative retry budget" {
 
 ///|
 test "parse rejects a non-numeric retry budget" {
-  match parse(retry_fixture("  retry: soon\n")) {
+  match @parser.parse(retry_fixture("  retry: soon\n")) {
     Err(msg) => @test.assert_eq(msg.contains("invalid retry"), true)
     Ok(_) => fail("should reject a non-numeric retry budget")
   }
@@ -1583,7 +1584,7 @@ test "parse rejects a non-numeric retry budget" {
 
 ///|
 test "parse rejects a retry without a value" {
-  match parse(retry_fixture("  retry:\n")) {
+  match @parser.parse(retry_fixture("  retry:\n")) {
     Err(msg) => @test.assert_eq(msg.contains("retry requires a value"), true)
     Ok(_) => fail("should reject a retry without a value")
   }
@@ -1620,7 +1621,7 @@ const FX_SUITE_HOOKS : String =
 
 ///|
 test "parse reads suite-level before_each and after_each blocks" {
-  let suite = match parse(FX_SUITE_HOOKS) {
+  let suite = match @parser.parse(FX_SUITE_HOOKS) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -1639,7 +1640,7 @@ test "parse reads suite-level before_each and after_each blocks" {
 
 ///|
 test "parse leaves the suite hooks empty when the file declares none" {
-  let suite = match parse(FX_DEFAULT_METHOD) {
+  let suite = match @parser.parse(FX_DEFAULT_METHOD) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -1667,7 +1668,7 @@ test "parse reads two steps inside one case-level hook" {
     #|expect:
     #|  status: 200
     #|
-  let suite = match parse(source) {
+  let suite = match @parser.parse(source) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -1688,7 +1689,7 @@ test "parse rejects a hook block with no steps" {
     #|expect:
     #|  status: 200
     #|
-  match parse(source) {
+  match @parser.parse(source) {
     Err(msg) => @test.assert_eq(msg.contains("is empty"), true)
     Ok(_) => fail("should reject an empty hook block")
   }
@@ -1705,7 +1706,7 @@ test "parse rejects a hook step that is not a case" {
     #|expect:
     #|  status: 200
     #|
-  match parse(source) {
+  match @parser.parse(source) {
     Err(msg) => @test.assert_eq(msg.contains("must start with \"name:\""), true)
     Ok(_) => fail("should reject a hook step without a name")
   }
@@ -1729,7 +1730,7 @@ test "a hook block written at the case indentation belongs to that case" {
     #|  expect:
     #|    status: 200
     #|
-  let suite = match parse(source) {
+  let suite = match @parser.parse(source) {
     Ok(v) => v
     Err(msg) => fail("parse should succeed: \{msg}")
   }
@@ -1760,7 +1761,7 @@ test "parse rejects a duplicate hook block" {
     #|expect:
     #|  status: 200
     #|
-  match parse(source) {
+  match @parser.parse(source) {
     Err(msg) =>
       @test.assert_eq(msg.contains("duplicate before_each block"), true)
     Ok(_) => fail("should reject a duplicate hook block")
@@ -1790,7 +1791,7 @@ test "parse rejects a hook step that declares its own hook" {
     #|expect:
     #|  status: 200
     #|
-  match parse(source) {
+  match @parser.parse(source) {
     Err(msg) => @test.assert_eq(msg.contains("cannot declare its own"), true)
     Ok(_) => fail("should reject a hook step that declares a hook")
   }

@@ -925,7 +925,7 @@ test "a config block that declares only a retry budget is not empty" {
 ///|
 /// The reply a scripted transport hands back: a response, or the message of a
 /// request that never reached the server.
-type Reply = Result[(Int, Array[(String, String)], String), String]
+type Reply = Result[(Int32, Array[(String, String)], String), String]
 
 ///|
 /// A transport that answers with a scripted list of replies and remembers what
@@ -938,7 +938,7 @@ struct Script {
   replies : Array[Reply]
   /// One `"VERB url | headers"` entry per call, in order.
   calls : Array[String]
-  mut index : Int
+  mut index : Int32
 }
 
 ///|
@@ -949,14 +949,14 @@ fn script(replies : Array[Reply]) -> Script {
 
 ///|
 /// A successful reply with the given status and body.
-fn reply(status : Int, body : String) -> Reply {
+fn reply(status : Int32, body : String) -> Reply {
   return Ok((status, [], body))
 }
 
 ///|
 /// A successful reply that also carries the given headers.
 fn reply_with(
-  status : Int,
+  status : Int32,
   headers : Array[(String, String)],
   body : String,
 ) -> Reply {
@@ -977,8 +977,8 @@ fn Script::transport(self : Script) -> @runner.Transport {
     url : String,
     headers : String,
     _body : String,
-    _timeout_ms : Int,
-  ) -> Result[(Int, Array[(String, String)], String), String] {
+    _timeout_ms : Int32,
+  ) -> Result[(Int32, Array[(String, String)], String), String] {
     self.calls.push("\{verb} \{url} | \{headers}")
     let i = self.index
     self.index = i + 1
@@ -996,7 +996,7 @@ fn Script::transport(self : Script) -> @runner.Transport {
 fn send_of(
   source : String,
   script : Script,
-  retry_count : Int,
+  retry_count : Int32,
 ) -> Result[@runner.Response, String] raise {
   let suite = suite_of(source)
   return @runner.run_request_with(
@@ -1222,7 +1222,7 @@ fn run_source(
 
 ///|
 /// Whether the `n`-th recorded call was made to `path`.
-fn called(script : Script, n : Int, path : String) -> Bool {
+fn called(script : Script, n : Int32, path : String) -> Bool {
   return n < script.calls.length() && script.calls[n].contains(path)
 }
 

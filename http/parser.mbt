@@ -20,7 +20,7 @@
 /// A parsed HTTP response.
 pub struct Response {
   /// Final status code, after any interim `1xx` responses were skipped.
-  status : Int
+  status : Int32
   /// Reason phrase as sent by the server, possibly empty.
   reason : String
   /// Header fields in arrival order, with names as the server wrote them.
@@ -28,12 +28,12 @@ pub struct Response {
   /// Body decoded as UTF-8.
   body : String
   /// How many interim `1xx` responses preceded the final one.
-  interim : Int
+  interim : Int32
 }
 
 ///|
 /// Split `HTTP/1.1 200 OK` into its status code and reason phrase.
-fn parse_status_line(text : String) -> Result[(Int, String), String] {
+fn parse_status_line(text : String) -> Result[(Int32, String), String] {
   if !starts_with_ci(text, "HTTP/") {
     return Err("malformed status line \"\{text}\": expected HTTP/<version>")
   }
@@ -167,12 +167,12 @@ fn contains_token(list : String, token : String) -> Bool {
 
 ///|
 /// The declared body length, if exactly one valid `Content-Length` exists.
-fn content_length(headers : Array[(String, String)]) -> Result[Int?, String] {
+fn content_length(headers : Array[(String, String)]) -> Result[Int32?, String] {
   let values = header_values(headers, "Content-Length")
   if values.length() == 0 {
     return Ok(None)
   }
-  let mut parsed : Int? = None
+  let mut parsed : Int32? = None
   for raw in values {
     let text = raw.trim().to_owned()
     if text.length() == 0 {
@@ -206,7 +206,7 @@ fn content_length(headers : Array[(String, String)]) -> Result[Int?, String] {
 
 ///|
 /// Parse a hexadecimal chunk size.
-fn parse_hex(text : String) -> Result[Int, String] {
+fn parse_hex(text : String) -> Result[Int32, String] {
   if text.length() == 0 {
     return Err("malformed chunk: the size is empty")
   }
@@ -299,7 +299,7 @@ fn decode_chunked(cursor : Cursor) -> Result[Array[Byte], String] {
 /// even when it carries a `Content-Length` describing what a `GET` would return.
 pub fn parse_response(
   raw : Bytes,
-  http_method? : String = "GET",
+  http_method~ : String = "GET",
 ) -> Result[Response, String] {
   let cursor = Cursor::new(raw)
   let mut status = 0

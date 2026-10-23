@@ -10,7 +10,7 @@
 ///|
 /// The six-bit value of a base64 alphabet character, or `None` for anything
 /// outside the alphabet.
-fn base64_value(code : Int) -> Int? {
+fn base64_value(code : Int32) -> Int32? {
   if code >= 0x41 && code <= 0x5a {
     // A-Z
     return Some(code - 0x41)

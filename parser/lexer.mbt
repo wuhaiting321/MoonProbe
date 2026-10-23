@@ -17,7 +17,7 @@
 /// A single meaningful line produced by the lexer.
 pub struct LexedLine {
   /// Indentation width of this line (a tab counts as two columns).
-  indent : Int
+  indent : Int32
   /// The left-hand key, already trimmed.
   key : String
   /// Optional right-hand value (already unquoted), or `None` for a block
@@ -30,7 +30,7 @@ pub struct LexedLine {
   /// for the number `7`. Without the flag both reach the AST as the same text.
   quoted : Bool
   /// 1-based source line number for diagnostics.
-  line_no : Int
+  line_no : Int32
 }
 
 ///|
@@ -127,7 +127,7 @@ fn strip_comment(line : String) -> String {
 /// leading whitespace characters — needed to slice the rest of the line — and
 /// `width` is the visual indentation width, with a tab counting as two columns
 /// so that tab-indented and space-indented sources nest identically.
-fn measure_indent(line : String) -> (Int, Int) {
+fn measure_indent(line : String) -> (Int32, Int32) {
   let n = line.length()
   let mut i = 0
   let mut width = 0
@@ -253,19 +253,19 @@ fn unescape(text : String) -> String {
 
 ///|
 /// The code point of the backslash character.
-const BACKSLASH : Int = 0x5c
+const BACKSLASH : Int32 = 0x5c
 
 ///|
 /// The code point of `#`, which opens a comment.
-const HASH : Int = 0x23
+const HASH : Int32 = 0x23
 
 ///|
 /// The code point of the double quote, which starts a string value.
-const DOUBLE_QUOTE : Int = 0x22
+const DOUBLE_QUOTE : Int32 = 0x22
 
 ///|
 /// The code point of the single quote, which starts a string value.
-const SINGLE_QUOTE : Int = 0x27
+const SINGLE_QUOTE : Int32 = 0x27
 
 ///|
 /// Split a bare comparison expression such as `duration_ms < 500` into
@@ -294,7 +294,7 @@ fn split_comparison(line : String) -> (String, String)? {
 
 ///|
 /// Whether `code` is a space or a tab.
-fn is_horizontal_space(code : Int) -> Bool {
+fn is_horizontal_space(code : Int32) -> Bool {
   return code == 0x20 || code == 0x09
 }
 
