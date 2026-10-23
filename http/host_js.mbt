@@ -19,10 +19,10 @@
 #cfg(target="js")
 extern "js" fn host_exchange(
   host : String,
-  port : Int,
+  port : Int32,
   tls : Bool,
   payload : String,
-  timeout_ms : Int,
+  timeout_ms : Int32,
 ) -> String =
   #| ((host, port, tls, payload, timeoutMs) => {
   #|   const cp = require("child_process");
@@ -82,7 +82,7 @@ extern "js" fn host_exchange(
   #|         : "the socket bridge exited with code " + result.status;
   #|       return "ERR\n" + detail.trim().replace(/\r?\n/g, " ");
   #|     }
-  #|     return "OK\n" + result.stdout.toString("base64");
+  #|     return "OK\n" + result.stdout.toString("utf8");
   #|   } catch (error) {
   #|     return "ERR\n" + String((error && error.message) || error);
   #|   }
@@ -99,7 +99,7 @@ pub fn send_platform(
   raw_url : String,
   header_block : String,
   body : String?,
-  timeout_ms : Int,
+  timeout_ms : Int32,
 ) -> Result[Response, String] {
   let url = match parse_url(raw_url) {
     Ok(value) => value
