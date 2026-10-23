@@ -9,6 +9,7 @@
     4. unit tests       moon test --target wasm-gc, every test green
     5. formatting       moon fmt --check
     6. commit history   commits reachable from HEAD
+    7. runnable example  the minimal example over a real connection
 
   Every check prints one [OK] / [FAIL] line, a failing check prints the tail of
   the command output, and the exit code is 0 only when all of them passed.
@@ -50,7 +51,7 @@ function Show-Log {
 # 1. Core code size
 # ---------------------------------------------------------------------------
 
-Write-Heading "1/6  Core code size (non-test .mbt)"
+Write-Heading "1/7  Core code size (non-test .mbt)"
 
 $coreFiles = Get-ChildItem -LiteralPath $PSScriptRoot -Recurse -File -Filter '*.mbt' -ErrorAction SilentlyContinue |
   Where-Object {
@@ -74,7 +75,7 @@ if ($coreLines -gt 1500) {
 # 2. Compile check
 # ---------------------------------------------------------------------------
 
-Write-Heading "2/6  Compile check (0 error / 0 warning)"
+Write-Heading "2/7  Compile check (0 error / 0 warning)"
 
 foreach ($target in @('wasm-gc', 'js')) {
   & moon check --target $target --deny-warn *> $log
@@ -90,7 +91,7 @@ foreach ($target in @('wasm-gc', 'js')) {
 # 3. Build check
 # ---------------------------------------------------------------------------
 
-Write-Heading "3/6  Build check (js)"
+Write-Heading "3/7  Build check (js)"
 
 & moon build --target js *> $log
 if ($LASTEXITCODE -eq 0) {
@@ -104,7 +105,7 @@ if ($LASTEXITCODE -eq 0) {
 # 4. Unit tests
 # ---------------------------------------------------------------------------
 
-Write-Heading "4/6  Unit tests (wasm-gc)"
+Write-Heading "4/7  Unit tests (wasm-gc)"
 
 & moon test --target wasm-gc *> $log
 $total = Select-String -LiteralPath $log -Pattern 'Total tests:' -ErrorAction SilentlyContinue |
@@ -121,7 +122,7 @@ if ($LASTEXITCODE -eq 0) {
 # 5. Formatting
 # ---------------------------------------------------------------------------
 
-Write-Heading "5/6  Formatting (moon fmt --check)"
+Write-Heading "5/7  Formatting (moon fmt --check)"
 
 & moon fmt --check *> $log
 if ($LASTEXITCODE -eq 0) {
@@ -135,7 +136,7 @@ if ($LASTEXITCODE -eq 0) {
 # 6. Commit history
 # ---------------------------------------------------------------------------
 
-Write-Heading "6/6  Commit history"
+Write-Heading "6/7  Commit history"
 
 $commits = 0
 $countText = & git rev-list --count HEAD 2>$null
@@ -148,6 +149,20 @@ if ($commits -gt 0) {
   Write-Ok "git history present"
 } else {
   Write-No "no commits found"
+}
+
+# ---------------------------------------------------------------------------
+# 7. Runnable example
+# ---------------------------------------------------------------------------
+
+Write-Heading "7/7  Runnable example (js, real connection)"
+
+& moon run cli --target js -- examples/example_com.probe *> $log
+if ($LASTEXITCODE -eq 0) {
+  Write-Ok "moon run cli --target js -- examples/example_com.probe"
+} else {
+  Write-No "moon run cli --target js -- examples/example_com.probe"
+  Show-Log 40
 }
 
 # ---------------------------------------------------------------------------

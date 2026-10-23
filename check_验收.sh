@@ -10,6 +10,7 @@
 #   4. unit tests       moon test --target wasm-gc, every test green
 #   5. formatting       moon fmt --check
 #   6. commit history   commits reachable from HEAD
+#   7. runnable example the minimal example over a real connection
 #
 # Every check prints one [OK] / [FAIL] line, a failing check prints the tail of
 # the command output, and the exit status is 0 only when all of them passed.
@@ -35,7 +36,7 @@ show_log() { sed 's/^/          /' "$LOG" | tail -n "${1:-30}"; }
 # 1. Core code size
 # ---------------------------------------------------------------------------
 
-heading '1/6  Core code size (non-test .mbt)'
+heading '1/7  Core code size (non-test .mbt)'
 
 CORE_LINES="$(
   find . -type f -name '*.mbt' \
@@ -57,7 +58,7 @@ fi
 # 2. Compile check
 # ---------------------------------------------------------------------------
 
-heading '2/6  Compile check (0 error / 0 warning)'
+heading '2/7  Compile check (0 error / 0 warning)'
 
 for target in wasm-gc js; do
   if moon check --target "$target" --deny-warn >"$LOG" 2>&1; then
@@ -72,7 +73,7 @@ done
 # 3. Build check
 # ---------------------------------------------------------------------------
 
-heading '3/6  Build check (js)'
+heading '3/7  Build check (js)'
 
 if moon build --target js >"$LOG" 2>&1; then
   ok 'moon build --target js'
@@ -85,7 +86,7 @@ fi
 # 4. Unit tests
 # ---------------------------------------------------------------------------
 
-heading '4/6  Unit tests (wasm-gc)'
+heading '4/7  Unit tests (wasm-gc)'
 
 if moon test --target wasm-gc >"$LOG" 2>&1; then
   SUMMARY="$(grep -m 1 'Total tests:' "$LOG" || true)"
@@ -99,7 +100,7 @@ fi
 # 5. Formatting
 # ---------------------------------------------------------------------------
 
-heading '5/6  Formatting (moon fmt --check)'
+heading '5/7  Formatting (moon fmt --check)'
 
 if moon fmt --check >"$LOG" 2>&1; then
   ok 'moon fmt --check'
@@ -112,7 +113,7 @@ fi
 # 6. Commit history
 # ---------------------------------------------------------------------------
 
-heading '6/6  Commit history'
+heading '6/7  Commit history'
 
 COMMITS="$(git rev-list --count HEAD 2>/dev/null || echo 0)"
 COMMITS="${COMMITS:-0}"
@@ -122,6 +123,19 @@ if [ "$COMMITS" -gt 0 ]; then
   ok "git history present"
 else
   no 'no commits found'
+fi
+
+# ---------------------------------------------------------------------------
+# 7. Runnable example
+# ---------------------------------------------------------------------------
+
+heading '7/7  Runnable example (js, real connection)'
+
+if moon run cli --target js -- examples/example_com.probe >"$LOG" 2>&1; then
+  ok 'moon run cli --target js -- examples/example_com.probe'
+else
+  no 'moon run cli --target js -- examples/example_com.probe'
+  show_log 40
 fi
 
 # ---------------------------------------------------------------------------

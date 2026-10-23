@@ -53,8 +53,11 @@ jobs:
       - name: Show the toolchain version
         run: moon version --all
 
+      - name: Check formatting
+        run: moon fmt --check
+
       - name: Check every package on the wasm-gc target
-        run: moon check --target wasm-gc
+        run: moon check --target wasm-gc --deny-warn
 
       - name: Run the unit tests on the wasm-gc target
         run: moon test --target wasm-gc
@@ -66,7 +69,10 @@ jobs:
         run: moon build --target wasm-gc
 
       - name: Check every package on the js target
-        run: moon check --target js
+        run: moon check --target js --deny-warn
 
       - name: Build the whole module on the js target
         run: moon build --target js
+
+      - name: Run the minimal example over a real connection
+        run: moon run cli --target js -- examples/example_com.probe
