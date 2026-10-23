@@ -21,9 +21,9 @@
 | 项目方向 | MoonBit 开发者工具 / API 测试基础设施 |
 | 是否为移植项目 | 否，原创项目 |
 | 模块名 | `wuhaiting321/moonprobe`（遵循 mooncakes.io 的 `<author>/<module>` 命名规范） |
-| 代码规模 | 5318 行 MoonBit 源码 + 5390 行测试代码，28 个 `.mbt` 文件，合计 10708 行 |
+| 代码规模 | 5332 行 MoonBit 源码 + 5398 行测试代码，28 个 `.mbt` 文件，合计约 10730 行 |
 | 测试状态 | `moon test --target wasm-gc` 全部通过（352 个用例，0 失败，含 5 个验收回归用例）；`js` 后端在此基础上另含 9 个真实网络用例 |
-| 构建状态 | `wasm-gc` 与 `js` 后端 `moon check` 零错误、零告警 |
+| 构建状态 | `wasm-gc` 与 `js` 后端 `moon check --deny-warn` 零错误、零告警 |
 | 开源许可证 | Apache-2.0 |
 
 ---
@@ -189,9 +189,9 @@ moon add wuhaiting321/moonprobe
 
 依赖方向单向：`cli → reporter → runner → assert / http → parser`，不存在环。
 `http` 与 `assert` 互不依赖；`runner` 只把两者串起来，因此断言引擎和协议栈都能单独
-在 `wasm-gc` 上测试。上表为源码文件的总行数（合计 5318 行），另有 5390 行测试代码，
-总计 10708 行；验收脚本 `check_验收.sh` / `check_验收.ps1` 按「非空行」口径统计为
-5318 行（要求 > 1500）。
+在 `wasm-gc` 上测试。上表为源码文件的总行数（合计 5332 行），另有 5398 行测试代码，
+总计约 10730 行；验收脚本 `check_验收.sh` / `check_验收.ps1` 按行数口径统计，
+源码（不含 `*_test.mbt`）为 5332 行（要求 > 1500）。
 
 ### 5.2 核心技术实现
 
@@ -432,8 +432,9 @@ JSON 数值 `7` vs `999`、macOS / Linux 下无外部可执行文件的客户端
 任一行为回退都会让流水线变红。
 
 以上检查已固化为验收脚本：`check_验收.sh`（Linux / macOS）与 `check_验收.ps1`（Windows）
-会依次执行代码规模统计、两个后端的 `moon check`、`moon build --target js`、
-`moon test --target wasm-gc`、`moon fmt --check` 与提交记录统计，全部通过才返回 0：
+会依次执行代码规模统计、两个后端的 `moon check --deny-warn`、`moon build --target js`、
+`moon test --target wasm-gc`、`moon fmt --check`、提交记录统计与最小示例的真实网络运行，
+全部通过才返回 0：
 
 ```bash
 bash check_验收.sh                                          # Linux / macOS
@@ -512,8 +513,48 @@ fragment 保留但不发送、`@deploy.json` 按字节发送。它们从 `.probe
 
 本阶段验收状态：`moon test --target wasm-gc` 共 352 个用例全部通过；`wasm-gc` 与
 `js` 两个后端 `moon check --deny-warn` 零错误、零告警。本阶段成果对应版本
-**0.2.0**，基线为 `0.1.0`（提交 `932cea7`），逐项变更与升级说明见
-[CHANGELOG.md](CHANGELOG.md)。
+**0.2.1**（验收修订版；0.2.0 为首版），基线为 `0.1.0`（提交 `932cea7`），
+逐项变更与升级说明见 [CHANGELOG.md](CHANGELOG.md)。
+
+---
+
+## 七、验收对照（官方 9 条）
+
+本节逐条对应《验收指南》的 9 项要求，并给出可直接复核的位置或命令。
+
+| # | 官方要求 | 本项目对应证据 |
+| --- | --- | --- |
+| 1 | 以 MoonBit 为主要实现语言，`moonc` 不低于 0.10.14 | 全部 28 个 `.mbt` 文件、5332 行源码均为 MoonBit；本地验证使用 `moonc v0.10.16`，CI 每次安装官方最新工具链并打印 `moon version --all` |
+| 2 | GitHub 仓库公开可访问，提交记录清晰 | 仓库 <https://github.com/wuhaiting321/MoonProbe> 公开；提交按 `feat(...)` / `docs(...)` / `chore(...)` 分模块，每个提交可独立编译与测试 |
+| 3 | 源代码结构清晰，能完成声明的核心功能 | `parser/`（词法 + AST + 解析）、`assert/`（断言引擎）、`http/`（自研 HTTP/1.1 栈）、`runner/`（执行与重试）、`reporter/`（终端 + JUnit XML）、`cli/`（入口）；核心功能与第三章条目一一对应 |
+| 4 | README 说明目标、安装、用法、示例，并可复现 | 第四章给出安装与三个示例，第五章给出语法、实现与构建命令，5.2.1 给出协议边界；所有命令均在本机与 CI 实际执行 |
+| 5 | 使用持续集成，覆盖检查、构建、测试 | [ci.yml](.github/workflows/ci.yml)：`moon fmt --check`、`wasm-gc` / `js` 双后端 `moon check --deny-warn`、`moon test --target wasm-gc`、回归套件单步、双后端 `moon build`、真实网络示例 |
+| 6 | 至少一个可运行示例或最小使用样例 | [examples/example_com.probe](examples/example_com.probe)：`moon run cli --target js -- examples/example_com.probe`，输出 `[PASS] example.com answers with 200` |
+| 7 | 完整测试，覆盖核心功能路径 | 352 个用例全部通过；其中 `tests/regression/` 5 条端到端用例锁定 9 月验收失败点，`assert/json_numeric_test.mbt` 32 条数值边界用例，`http/` 包 56 条协议用例 |
+| 8 | 发布到 mooncakes.io | [`wuhaiting321/moonprobe@0.2.1`](https://mooncakes.io/docs/wuhaiting321/moonprobe)，`moon add wuhaiting321/moonprobe@0.2.1` |
+| 9 | 采用 OSI 认可的开源许可证；参考或移植需符合原许可证 | Apache-2.0（[LICENSE](LICENSE)）；非移植项目，原创性说明见 5.7，仅依赖 Apache-2.0 的官方标准库 |
+
+### 7.1 验收演练记录
+
+定稿前按上述条目做了一次完整演练，发现并修复了两处在“能编译、能跑单测”时不会暴露的问题：
+
+- **真实传输链路**：`js` 宿主的 Node 桥接把已经 base64 编码的响应又编码了一次，
+  协议层拿到的是 base64 文本而不是响应字节，任何真实请求都会报
+  `malformed status line`。修复后 `examples/example_com.probe` 实测通过；
+  CI 增加真实网络示例步骤，防止再次退化。
+- **工具链新告警**：当前 `moonc` 对黑盒测试中的非限定包名与 `derive(Eq)` 的隐式方法
+  提升给出告警。测试调用改为 `@parser.parse` / `@http.parse_url` 等显式形式，
+  并为 `SetSource` / `JsonType` 增加 `pub extend ... with Eq::{not_equal, equal}`，
+  使 `moon check --deny-warn` 在 `wasm-gc` 与 `js` 两个后端都真正零告警。
+
+验收演练的实际输出：
+
+```text
+Total tests: 352, passed: 352, failed: 0.
+[PASS] example.com answers with 200
+Summary: 1 total, 1 passed, 0 failed in 2218 ms
+Result: PASSED
+```
 
 ---
 

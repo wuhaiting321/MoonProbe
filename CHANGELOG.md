@@ -3,6 +3,37 @@
 本项目的所有重要变更都记录在此文件。版本号遵循语义化版本；模块以
 `wuhaiting321/moonprobe` 发布到 [mooncakes.io](https://mooncakes.io/docs/wuhaiting321/moonprobe)。
 
+## 0.2.1 — 2026-10-23
+
+验收演练修订版。0.2.0 的所有功能保持不变，本版修复真实网络传输缺陷，并把
+告警门禁与真实示例纳入 CI。
+
+### 修复
+
+- **js 宿主的 Node 桥接重复编码响应**：桥接子进程已经把响应字节转成 base64，
+  外层却对这段 base64 文本再次编码，协议层拿到的是文本而不是字节，任何真实
+  请求都会以 `malformed status line` 失败。现在外层按 UTF-8 原样回传，由
+  `decode_base64` 解码一次；`examples/example_com.probe` 实测通过。
+- **moonc 0.10.16 的新告警**：黑盒测试中的非限定包名改为 `@parser.parse` /
+  `@http.parse_url` 等显式调用；`SetSource` / `JsonType` 增加
+  `pub extend ... with Eq::{not_equal, equal}`，消除 `implicit_impl_as_method`。
+
+### 变更
+
+- CI 增加 `moon fmt --check`，两个后端改用 `moon check --deny-warn`，并新增
+  真实网络示例步骤，防止传输链路再次退化。
+- README 新增「七、验收对照（官方 9 条）」，逐条给出可复核证据。
+
+### 验证
+
+```bash
+moon fmt --check                          # OK
+moon check --target wasm-gc --deny-warn   # 0 error / 0 warning
+moon check --target js --deny-warn        # 0 error / 0 warning
+moon test  --target wasm-gc               # 352 passed / 0 failed
+moon run cli --target js -- examples/example_com.probe   # PASSED
+```
+
 ## 0.2.0 — 2026-10-21
 
 基线 `0.1.0`（提交 `932cea7`）。本版本对应 10 月 MoonBit 黑客松的深度重构：
